@@ -1,0 +1,88 @@
+﻿# Byte-compiled / optimized / compiled files
+__pycache__/
+*.pyc
+*.pyd
+*.pyo
+
+# Virtual environment
+.venv-whisper/
+venv/
+env/
+# Specific to some virtual environment tools
+pip-wheel-metadata/
+.Python/
+
+# pyenv
+.python-version
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+target/
+
+# celery beat schedule file
+celerybeat-schedule
+
+# SageMath parsed files
+*.sage.py
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Distribution / build files
+.eggs/
+*.egg-info/
+dist/
+build/
+
+# IDE-specific files
+.idea/  # PyCharm
+.vscode/ # VS Code
+*.sublime-project
+*.sublime-workspace
+
+# Editor backup files
+*~
+*.bak
+*.swp
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Logs and databases
+*.log
+*.sqlite3
+*.db
+
+# Environment variables
+.env
+.flaskenv
+instance/
+.webassets-cache
+
+# Test results
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Jupyter Notebook files (if applicable)
+.ipynb_checkpoints/
+
+# Audio files
+*.mp3
+*.wav
+*.flac
+
+# Uploaded files or generated data (specific to Whisper/FastAPI)
+/uploads/
+/transcriptions/
+/audios/
+/audio_files/
+/models/
+/whisper-large-v3-finetuned/

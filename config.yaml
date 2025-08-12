@@ -1,0 +1,28 @@
+# Model and tokenizer parameters
+#model_id: "openai/whisper-small"
+#processor_id: "openai/whisper-small"
+model_id: "openai/whisper-large-v3"
+processor_id: "openai/whisper-large-v3"
+#language: "spanish"
+task: "transcribe"
+
+# Data paths
+data_path: "data/dataset"
+metadata_file: "data/dataset/metadata.csv"
+processed_data_path: "data/processed_dataset"
+output_dir: "./whisper-large-v3-finetuned"
+push_to_hub: false
+hub_model_id: "acunacesar/whisper-large-v3-finetuned"
+
+# Training parameters
+num_train_epochs: 3
+per_device_train_batch_size: 8
+gradient_accumulation_steps: 2
+learning_rate: 1.0e-5
+warmup_steps: 50
+fp16: true
+eval_strategy: "steps"
+eval_steps: 500
+save_steps: 500
+logging_steps: 50
+report_to: "tensorboard"

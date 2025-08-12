@@ -1,0 +1,46 @@
+﻿# 1. primero se ejecuta esta instalacion
+#  pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
+# 2. requirements.txt
+# se instalan los demas requerimeintos
+# Core ML Libraries (excluding torch)
+transformers>=4.36.0
+datasets>=2.14.0
+accelerate
+
+# Evaluation
+evaluate
+jiwer
+
+# Audio & Other Utilities
+soundfile
+librosa
+pyyaml
+fastapi[all]
+uvicorn
+pydantic
+python-multipart
+python-multipart
+pydub
+pyannote.audio==3.1.1
+langdetect
+ffmpeg-python
+
+# Pin NumPy to a compatible version to avoid conflicts
+numpy<2.0
+
+# Para la Base de Datos
+sqlalchemy
+pyodbc  # O el driver que corresponda si no usas pyodbc
+eventlet # Para la Concurrencia
+
+# Para las Tareas en Segundo Plano
+celery
+redis
+
+# 3. verificar las versiones de python y torch
+# python -c "import sys; print(sys.version)"
+# python -c "import torch; print(torch.__version__)"
+
+# 4. ejecutar el api desde la linea de comandos
+# curl -X POST -F "file=@./cp2530.wav" http://127.0.0.1:8000/transcribe-and-diarize/

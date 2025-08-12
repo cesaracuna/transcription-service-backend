@@ -1,0 +1,17 @@
+﻿# docker-compose.yml
+
+version: '3.8'
+
+services:
+  # Servicio de Redis
+  redis:
+    image: "redis:alpine"
+    container_name: transcription_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: always
+
+volumes:
+  redis-data:
