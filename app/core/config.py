@@ -8,8 +8,8 @@ from typing import Optional, List, Any, Dict
 from pathlib import Path
 from functools import lru_cache
 
-from pydantic import BaseSettings, Field, validator
-from pydantic.env_settings import SettingsSourceCallable
+from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class DatabaseSettings(BaseSettings):
@@ -25,8 +25,7 @@ class DatabaseSettings(BaseSettings):
     pool_timeout: int = Field(default=30, description="Pool timeout in seconds")
     pool_recycle: int = Field(default=3600, description="Connection recycle time in seconds")
     
-    class Config:
-        env_prefix = "DB_"
+    model_config = SettingsConfigDict(env_prefix="DB_")
 
 
 class RedisSettings(BaseSettings):
@@ -37,8 +36,7 @@ class RedisSettings(BaseSettings):
     socket_timeout: int = Field(default=30, description="Socket timeout in seconds")
     socket_connect_timeout: int = Field(default=30, description="Socket connect timeout")
     
-    class Config:
-        env_prefix = "REDIS_"
+    model_config = SettingsConfigDict(env_prefix="REDIS_")
 
 
 class CelerySettings(BaseSettings):
@@ -56,8 +54,7 @@ class CelerySettings(BaseSettings):
         default=True, description="Cancel long-running tasks on connection loss"
     )
     
-    class Config:
-        env_prefix = "CELERY_"
+    model_config = SettingsConfigDict(env_prefix="CELERY_")
 
 
 class AIModelSettings(BaseSettings):
@@ -80,8 +77,7 @@ class AIModelSettings(BaseSettings):
     # Hugging Face token for model access
     hf_token: Optional[str] = Field(default=None, description="Hugging Face access token")
     
-    class Config:
-        env_prefix = "AI_"
+    model_config = SettingsConfigDict(env_prefix="AI_")
 
 
 class AudioProcessingSettings(BaseSettings):
@@ -98,8 +94,7 @@ class AudioProcessingSettings(BaseSettings):
     # Storage paths
     audio_storage_path: str = Field(default="./audio_files", description="Audio files storage path")
     
-    class Config:
-        env_prefix = "AUDIO_"
+    model_config = SettingsConfigDict(env_prefix="AUDIO_")
 
 
 class HallucinationDetectionSettings(BaseSettings):
@@ -113,8 +108,7 @@ class HallucinationDetectionSettings(BaseSettings):
     sandwich_max_duration: float = Field(default=4.0, description="Max duration for sandwich detection")
     outlier_lang_max_duration: float = Field(default=5.0, description="Max duration for language outlier")
     
-    class Config:
-        env_prefix = "HALLUCINATION_"
+    model_config = SettingsConfigDict(env_prefix="HALLUCINATION_")
 
 
 class DiarizationSettings(BaseSettings):
@@ -126,8 +120,7 @@ class DiarizationSettings(BaseSettings):
     min_duration_off: float = Field(default=0.04, description="Min duration off")
     min_speaker_segment_duration: float = Field(default=1.0, description="Min speaker segment duration")
     
-    class Config:
-        env_prefix = "DIARIZATION_"
+    model_config = SettingsConfigDict(env_prefix="DIARIZATION_")
 
 
 class SecuritySettings(BaseSettings):
@@ -151,8 +144,7 @@ class SecuritySettings(BaseSettings):
     cors_allow_methods: List[str] = Field(default=["*"], description="Allowed CORS methods")
     cors_allow_headers: List[str] = Field(default=["*"], description="Allowed CORS headers")
     
-    class Config:
-        env_prefix = "SECURITY_"
+    model_config = SettingsConfigDict(env_prefix="SECURITY_")
 
 
 class LoggingSettings(BaseSettings):
@@ -170,8 +162,7 @@ class LoggingSettings(BaseSettings):
     # Structured logging
     use_json: bool = Field(default=False, description="Use JSON logging format")
     
-    class Config:
-        env_prefix = "LOGGING_"
+    model_config = SettingsConfigDict(env_prefix="LOGGING_")
 
 
 class Settings(BaseSettings):
@@ -200,48 +191,35 @@ class Settings(BaseSettings):
     security: SecuritySettings = Field(default_factory=SecuritySettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
     
-    @validator("environment")
+    @field_validator("environment")
+    @classmethod
     def validate_environment(cls, v):
         allowed = ["development", "production", "testing"]
         if v not in allowed:
             raise ValueError(f"Environment must be one of {allowed}")
         return v
     
-    @validator("ai_models", pre=True, always=True)
-    def set_ai_device(cls, v, values):
+    @model_validator(mode="before")
+    @classmethod
+    def set_ai_device(cls, values):
         """Auto-detect computing device if set to 'auto'."""
-        if isinstance(v, dict) and v.get("device") == "auto":
-            try:
-                import torch
-                v["device"] = "cuda:0" if torch.cuda.is_available() else "cpu"
-            except ImportError:
-                v["device"] = "cpu"
-        elif isinstance(v, AIModelSettings) and v.device == "auto":
-            try:
-                import torch
-                v.device = "cuda:0" if torch.cuda.is_available() else "cpu"
-            except ImportError:
-                v.device = "cpu"
-        return v
+        if isinstance(values, dict):
+            ai_models = values.get("ai_models", {})
+            if isinstance(ai_models, dict) and ai_models.get("device") == "auto":
+                try:
+                    import torch
+                    ai_models["device"] = "cuda:0" if torch.cuda.is_available() else "cpu"
+                except ImportError:
+                    ai_models["device"] = "cpu"
+                values["ai_models"] = ai_models
+        return values
     
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
-        
-        @classmethod
-        def customise_sources(
-            cls,
-            init_settings: SettingsSourceCallable,
-            env_settings: SettingsSourceCallable,
-            file_secret_settings: SettingsSourceCallable,
-        ) -> tuple[SettingsSourceCallable, ...]:
-            """Customize settings sources priority."""
-            return (
-                init_settings,
-                env_settings,
-                file_secret_settings,
-            )
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore"
+    )
 
 
 @lru_cache()

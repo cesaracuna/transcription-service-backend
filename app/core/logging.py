@@ -8,8 +8,15 @@ import sys
 from typing import Optional
 from pathlib import Path
 
-import structlog
-from structlog.types import FilteringBoundLogger
+try:
+    import structlog
+    from structlog.types import FilteringBoundLogger
+    STRUCTLOG_AVAILABLE = True
+except ImportError:
+    # Fallback when structlog is not available
+    structlog = None
+    FilteringBoundLogger = object
+    STRUCTLOG_AVAILABLE = False
 
 from .config import LoggingSettings
 
@@ -27,6 +34,15 @@ def configure_structlog(
         use_json: Whether to use JSON output format
         service_name: Service name for logging context
     """
+    if not STRUCTLOG_AVAILABLE:
+        # Fallback to standard logging
+        logging.basicConfig(
+            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            stream=sys.stdout,
+            level=getattr(logging, log_level.upper()),
+        )
+        return
+    
     timestamper = structlog.processors.TimeStamper(fmt="ISO")
     
     shared_processors = [
@@ -75,7 +91,7 @@ def configure_structlog(
 def setup_logging(
     settings: LoggingSettings,
     process_name: Optional[str] = None,
-) -> FilteringBoundLogger:
+) -> Optional[FilteringBoundLogger]:
     """
     Set up comprehensive logging configuration.
     
@@ -84,9 +100,9 @@ def setup_logging(
         process_name: Optional process name for context
         
     Returns:
-        Configured structlog logger
+        Configured structlog logger or standard logger
     """
-    # Configure structlog
+    # Configure structlog or fallback
     configure_structlog(
         log_level=settings.level,
         use_json=settings.use_json,
@@ -115,9 +131,15 @@ def setup_logging(
         root_logger.addHandler(file_handler)
     
     # Create logger with context
-    logger = structlog.get_logger()
-    if process_name:
-        logger = logger.bind(process=process_name)
+    if STRUCTLOG_AVAILABLE:
+        logger = structlog.get_logger()
+        if process_name:
+            logger = logger.bind(process=process_name)
+    else:
+        # Fallback to standard logging
+        logger = logging.getLogger("transcription-service")
+        if process_name:
+            logger = logger.getChild(process_name)
     
     # Silence noisy third-party loggers
     logging.getLogger("urllib3").setLevel(logging.WARNING)
@@ -128,7 +150,7 @@ def setup_logging(
     return logger
 
 
-def get_logger(name: str, **context) -> FilteringBoundLogger:
+def get_logger(name: str, **context):
     """
     Get a logger with optional context.
     
@@ -139,7 +161,13 @@ def get_logger(name: str, **context) -> FilteringBoundLogger:
     Returns:
         Configured logger with context
     """
-    logger = structlog.get_logger(name)
-    if context:
-        logger = logger.bind(**context)
+    if STRUCTLOG_AVAILABLE:
+        logger = structlog.get_logger(name)
+        if context:
+            logger = logger.bind(**context)
+    else:
+        # Fallback to standard logging
+        logger = logging.getLogger(name)
+        # Note: Standard logger doesn't support binding context
+    
     return logger

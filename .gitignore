@@ -6,6 +6,7 @@ __pycache__/
 
 # Virtual environment
 .venv-whisper/
+.venv_bkend/
 venv/
 env/
 # Specific to some virtual environment tools

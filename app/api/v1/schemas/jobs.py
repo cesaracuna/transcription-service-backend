@@ -6,7 +6,7 @@ from typing import Optional, List
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 from .common import BaseSchema, TimestampMixin, PaginationResponse, TimeInterval, ProcessingMetrics
 from ....domain.shared.enums import JobStatus, Language
@@ -72,13 +72,16 @@ class Job(BaseSchema, TimestampMixin):
     # Computed fields
     full_text: Optional[str] = Field(None, description="Complete transcript with speaker labels")
     
-    @validator('full_text', always=True)
-    def generate_full_text(cls, v, values):
+    @field_validator('full_text', mode='before')
+    @classmethod
+    def generate_full_text(cls, v, info):
         """Generate full text from segments if not provided."""
         if v is not None:
             return v
         
-        segments = values.get('segments', [])
+        # Get data from ValidationInfo context
+        data = info.data if hasattr(info, 'data') else {}
+        segments = data.get('segments', [])
         if not segments:
             return ""
         

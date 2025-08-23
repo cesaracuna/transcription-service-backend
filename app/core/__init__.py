@@ -15,44 +15,61 @@ from .config import (
     DatabaseSettings,
     RedisSettings,
     CelerySettings,
-    AISettings,
+    AIModelSettings,
+    AudioProcessingSettings,
+    HallucinationDetectionSettings,
+    DiarizationSettings,
+    SecuritySettings,
+    LoggingSettings,
     get_settings
 )
 
-from .dependencies import (
-    get_current_user,
-    get_transcription_service,
-    get_user_service,
-    get_file_manager,
-    get_redis_client,
-    get_database
-)
-
 from .exceptions import (
-    BaseAppException,
-    DomainValidationError,
-    ResourceNotFoundError,
-    BusinessRuleViolationError,
+    TranscriptionServiceError,
+    ConfigurationError,
     DatabaseError,
-    ExternalServiceError,
+    AudioProcessingError,
+    ModelLoadingError,
+    TranscriptionError,
+    DiarizationError,
+    HallucinationDetectionError,
+    StorageError,
+    ValidationError,
     AuthenticationError,
-    AuthorizationError
+    AuthorizationError,
+    JobNotFoundError,
+    UserNotFoundError,
+    ResourceNotFoundError,
+    RateLimitError,
+    ServiceUnavailableError
 )
 
-from .security import (
-    verify_password,
-    get_password_hash,
-    create_access_token,
-    decode_access_token,
-    get_current_user_from_token
-)
-
-from .logging import (
-    setup_logging,
-    get_logger,
-    log_performance,
-    log_audit_event
-)
+# Import modules that exist
+try:
+    from .dependencies import *
+except ImportError:
+    pass
+    
+try:
+    from .security import *
+except ImportError:
+    pass
+    
+try:
+    from .logging import (
+        setup_logging,
+        get_logger
+    )
+except ImportError:
+    # Create fallback functions if logging module fails to import
+    def setup_logging(settings):
+        import logging
+        logging.basicConfig(level=logging.INFO)
+        return logging.getLogger(__name__)
+    
+    def get_logger(name):
+        import logging
+        return logging.getLogger(name)
 
 __all__ = [
     # Configuration
@@ -60,37 +77,34 @@ __all__ = [
     "DatabaseSettings", 
     "RedisSettings",
     "CelerySettings",
-    "AISettings",
+    "AIModelSettings",
+    "AudioProcessingSettings",
+    "HallucinationDetectionSettings",
+    "DiarizationSettings",
+    "SecuritySettings",
+    "LoggingSettings",
     "get_settings",
-    
-    # Dependencies
-    "get_current_user",
-    "get_transcription_service",
-    "get_user_service",
-    "get_file_manager",
-    "get_redis_client", 
-    "get_database",
-    
-    # Exceptions
-    "BaseAppException",
-    "DomainValidationError",
-    "ResourceNotFoundError",
-    "BusinessRuleViolationError",
-    "DatabaseError",
-    "ExternalServiceError",
-    "AuthenticationError",
-    "AuthorizationError",
-    
-    # Security
-    "verify_password",
-    "get_password_hash",
-    "create_access_token",
-    "decode_access_token",
-    "get_current_user_from_token",
     
     # Logging
     "setup_logging",
     "get_logger",
-    "log_performance",
-    "log_audit_event"
+    
+    # Exceptions
+    "TranscriptionServiceError",
+    "ConfigurationError",
+    "DatabaseError",
+    "AudioProcessingError",
+    "ModelLoadingError",
+    "TranscriptionError",
+    "DiarizationError",
+    "HallucinationDetectionError",
+    "StorageError",
+    "ValidationError",
+    "AuthenticationError",
+    "AuthorizationError",
+    "JobNotFoundError",
+    "UserNotFoundError",
+    "ResourceNotFoundError",
+    "RateLimitError",
+    "ServiceUnavailableError"
 ]

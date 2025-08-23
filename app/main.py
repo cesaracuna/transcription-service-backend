@@ -23,12 +23,10 @@ from .core import (
     get_settings,
     setup_logging,
     get_logger,
-    BaseAppException,
-    DomainValidationError,
+    TranscriptionServiceError,
+    ValidationError,
     ResourceNotFoundError,
-    BusinessRuleViolationError,
-    DatabaseError,
-    ExternalServiceError
+    DatabaseError
 )
 from .utils import get_utc_now
 from .api import api_v1_router
@@ -40,8 +38,7 @@ from .infrastructure import (
     cleanup_models
 )
 
-# Set up logging
-logger = get_logger(__name__)
+# Logger will be set up after settings are loaded
 
 
 @asynccontextmanager
@@ -50,8 +47,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     Application lifespan context manager.
     Handles startup and shutdown events for proper resource management.
     """
-    logger.info("🚀 Starting Transcription Service Backend...")
     settings = get_settings()
+    logger = get_logger(__name__)
+    logger.info("🚀 Starting Transcription Service Backend...")
     
     try:
         # Startup events
@@ -375,7 +373,8 @@ app = create_application()
 
 
 # Configure startup logging
-setup_logging()
+settings = get_settings()
+logger = setup_logging(settings.logging)
 logger.info(f"🔧 {__title__} v{__version__} configured successfully")
 
 

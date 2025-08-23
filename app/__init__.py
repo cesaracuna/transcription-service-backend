@@ -18,17 +18,25 @@ __copyright__ = "2025, Organization of American States"
 # Export main application components
 from .core.config import get_settings
 from .core.exceptions import (
-    DomainValidationError,
+    ValidationError,
     ResourceNotFoundError,
-    BusinessRuleViolationError
+    TranscriptionServiceError
 )
 
-# Export domain models for external usage
-from .domain.transcription.models import User, TranscriptionJob, TranscriptionSegment
-from .domain.shared.enums import JobStatus, SegmentType, ConfidenceLevel
+# Import domain models and API components if they exist
+try:
+    from .domain.transcription.models import User, TranscriptionJob, TranscriptionSegment
+    from .domain.shared.enums import JobStatus, SegmentType, ConfidenceLevel
+except ImportError:
+    # Domain models not implemented yet
+    User = TranscriptionJob = TranscriptionSegment = None
+    JobStatus = SegmentType = ConfidenceLevel = None
 
-# Export API components
-from .api.v1 import api_router as api_v1_router
+try:
+    from .api.v1 import api_router as api_v1_router
+except ImportError:
+    # API router not implemented yet
+    api_v1_router = None
 
 __all__ = [
     # Metadata
@@ -44,9 +52,9 @@ __all__ = [
     "get_settings",
     
     # Exceptions
-    "DomainValidationError",
+    "ValidationError",
     "ResourceNotFoundError", 
-    "BusinessRuleViolationError",
+    "TranscriptionServiceError",
     
     # Domain models
     "User",

@@ -10,29 +10,42 @@ defined in the domain layer. These implementations handle:
 - Pagination and filtering
 """
 
-from .base import SQLBaseRepository
-from .user_repository import SQLUserRepository
-from .transcription_job_repository import SQLTranscriptionJobRepository
-from .transcription_segment_repository import SQLTranscriptionSegmentRepository
-from .diarization_segment_repository import SQLDiarizationSegmentRepository
-from .hallucination_repository import SQLHallucinationRepository
-from .speaker_repository import SQLSpeakerRepository
+try:
+    from .base import SQLAlchemyRepository, SyncSQLAlchemyRepository
+except ImportError:
+    SQLAlchemyRepository = None
+    SyncSQLAlchemyRepository = None
 
-# Dependency injection functions
-from .dependencies import (
-    get_user_repository,
-    get_transcription_job_repository,
-    get_transcription_segment_repository,
-    get_diarization_segment_repository,
-    get_hallucination_repository,
-    get_speaker_repository
-)
+try:
+    from .users import SQLUserRepository
+except ImportError:
+    SQLUserRepository = None
+
+try:
+    from .jobs import SQLTranscriptionJobRepository
+except ImportError:
+    SQLTranscriptionJobRepository = None
+
+# Set defaults for missing repositories  
+SQLTranscriptionSegmentRepository = None
+SQLDiarizationSegmentRepository = None
+SQLHallucinationRepository = None
+SQLSpeakerRepository = None
+
+# Set defaults for missing dependency functions
+get_user_repository = None
+get_transcription_job_repository = None
+get_transcription_segment_repository = None
+get_diarization_segment_repository = None
+get_hallucination_repository = None
+get_speaker_repository = None
 
 __all__ = [
     # Base repository
-    "SQLBaseRepository",
+    "SQLAlchemyRepository",
+    "SyncSQLAlchemyRepository",
     
-    # Repository implementations
+    # Repository implementations  
     "SQLUserRepository",
     "SQLTranscriptionJobRepository",
     "SQLTranscriptionSegmentRepository", 

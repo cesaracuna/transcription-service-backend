@@ -6,7 +6,7 @@ from typing import Optional
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field, EmailStr, validator
+from pydantic import BaseModel, Field, EmailStr, field_validator
 
 from .common import BaseSchema, TimestampMixin
 
@@ -16,7 +16,8 @@ class UserCreate(BaseSchema):
     username: str = Field(..., min_length=3, max_length=50, description="Username")
     email: EmailStr = Field(..., description="Email address")
     
-    @validator('username')
+    @field_validator('username')
+    @classmethod
     def validate_username(cls, v):
         """Validate username format."""
         if not v.isalnum():
@@ -44,7 +45,8 @@ class UserUpdate(BaseSchema):
     username: Optional[str] = Field(None, min_length=3, max_length=50, description="Username")
     email: Optional[EmailStr] = Field(None, description="Email address")
     
-    @validator('username')
+    @field_validator('username')
+    @classmethod
     def validate_username(cls, v):
         """Validate username format."""
         if v is not None and not v.isalnum():
