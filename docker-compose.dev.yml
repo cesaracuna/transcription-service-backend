@@ -1,0 +1,124 @@
+version: '3.8'
+
+services:
+  # Development application service
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=development
+      - DB_URL=postgresql://transcription_user:transcription_pass@db:5432/transcription_db
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - LOGGING_LEVEL=DEBUG
+    volumes:
+      - ./app:/app/app  # Mount source code for hot reload
+      - ./tests:/app/tests
+      - audio_files:/app/data/audio_files
+      - app_logs:/app/logs
+    depends_on:
+      - db
+      - redis
+    restart: unless-stopped
+
+  # Development Celery worker
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    command: celery -A app.infrastructure.workers.celery_app worker --loglevel=debug --concurrency=1
+    environment:
+      - ENVIRONMENT=development
+      - DB_URL=postgresql://transcription_user:transcription_pass@db:5432/transcription_db
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - AI_DEVICE=cpu
+      - LOGGING_LEVEL=DEBUG
+    volumes:
+      - ./app:/app/app  # Mount source code for hot reload
+      - audio_files:/app/data/audio_files
+      - app_logs:/app/logs
+      - ai_models:/app/models
+    depends_on:
+      - db
+      - redis
+    restart: unless-stopped
+
+  # PostgreSQL database
+  db:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=transcription_db
+      - POSTGRES_USER=transcription_user
+      - POSTGRES_PASSWORD=transcription_pass
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+  # Redis for development
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
+  # Redis Commander for Redis management
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+      - HTTP_USER=admin
+      - HTTP_PASSWORD=admin
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  # pgAdmin for database management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@transcription.local
+      - PGADMIN_DEFAULT_PASSWORD=admin
+      - PGADMIN_CONFIG_SERVER_MODE=False
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    ports:
+      - "5050:80"
+    depends_on:
+      - db
+    restart: unless-stopped
+
+  # Mailhog for email testing
+  mailhog:
+    image: mailhog/mailhog:latest
+    ports:
+      - "1025:1025"  # SMTP server
+      - "8025:8025"  # Web UI
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  audio_files:
+  app_logs:
+  ai_models:
+  pgadmin_data:
+
+networks:
+  default:
+    name: transcription_dev_network
+    driver: bridge

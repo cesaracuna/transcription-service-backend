@@ -334,3 +334,25 @@ def mark_job_as_viewed(job_id: uuid.UUID, db: Session = Depends(get_db)):
 
     # 204 Success, with no content to return!
     return
+
+
+@app.get("/users/check/{user_name}")
+def check_user_exists(user_name: str, db: Session = Depends(get_db)):
+    """
+    Verifies if a user exists by username.
+    """
+    logging.info(f"Checking if user exists: {user_name}")
+    
+    try:
+        user = db.query(models.User).filter(models.User.username == user_name).first()
+        
+        if user:
+            logging.info(f"User found: {user_name}")
+            return {"exists": True, "user_id": str(user.id)}
+        else:
+            logging.info(f"User not found: {user_name}")
+            return {"exists": False}
+            
+    except Exception as e:
+        logging.error(f"Error checking user existence for {user_name}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")

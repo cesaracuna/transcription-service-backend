@@ -1,0 +1,171 @@
+version: '3.8'
+
+services:
+  # Test application service
+  app-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: testing
+    environment:
+      - ENVIRONMENT=testing
+      - DB_URL=postgresql://test_user:test_pass@db-test:5432/test_db
+      - REDIS_URL=redis://redis-test:6379/15
+      - CELERY_BROKER_URL=redis://redis-test:6379/15
+      - CELERY_RESULT_BACKEND=redis://redis-test:6379/15
+      - AI_DEVICE=cpu
+    volumes:
+      - ./app:/app/app
+      - ./tests:/app/tests
+      - test_coverage:/app/htmlcov
+    depends_on:
+      - db-test
+      - redis-test
+    command: >
+      sh -c "
+        echo 'Waiting for database...' &&
+        while ! nc -z db-test 5432; do sleep 1; done &&
+        echo 'Database ready!' &&
+        alembic upgrade head &&
+        pytest -v --cov=app --cov-report=html --cov-report=term-missing --cov-report=xml
+      "
+
+  # Test database
+  db-test:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=test_db
+      - POSTGRES_USER=test_user
+      - POSTGRES_PASSWORD=test_pass
+    volumes:
+      - test_postgres_data:/var/lib/postgresql/data
+    tmpfs:
+      - /tmp
+    shm_size: 256mb
+
+  # Test Redis
+  redis-test:
+    image: redis:7-alpine
+    command: redis-server --save "" --appendonly no
+    tmpfs:
+      - /data
+
+  # Unit tests runner
+  unit-tests:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: testing
+    environment:
+      - ENVIRONMENT=testing
+      - DB_URL=postgresql://test_user:test_pass@db-test:5432/test_db
+      - REDIS_URL=redis://redis-test:6379/15
+    volumes:
+      - ./app:/app/app
+      - ./tests:/app/tests
+      - test_coverage:/app/htmlcov
+    depends_on:
+      - db-test
+      - redis-test
+    command: pytest tests/unit/ -v --cov=app.domain --cov=app.infrastructure --cov-report=html --cov-report=term
+
+  # Integration tests runner
+  integration-tests:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: testing
+    environment:
+      - ENVIRONMENT=testing
+      - DB_URL=postgresql://test_user:test_pass@db-test:5432/test_db
+      - REDIS_URL=redis://redis-test:6379/15
+      - CELERY_BROKER_URL=redis://redis-test:6379/15
+      - CELERY_RESULT_BACKEND=redis://redis-test:6379/15
+    volumes:
+      - ./app:/app/app
+      - ./tests:/app/tests
+      - test_coverage:/app/htmlcov
+    depends_on:
+      - db-test
+      - redis-test
+    command: >
+      sh -c "
+        echo 'Waiting for database...' &&
+        while ! nc -z db-test 5432; do sleep 1; done &&
+        alembic upgrade head &&
+        pytest tests/integration/ -v --cov-append
+      "
+
+  # E2E tests runner
+  e2e-tests:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: testing
+    environment:
+      - ENVIRONMENT=testing
+      - DB_URL=postgresql://test_user:test_pass@db-test:5432/test_db
+      - REDIS_URL=redis://redis-test:6379/15
+      - CELERY_BROKER_URL=redis://redis-test:6379/15
+      - CELERY_RESULT_BACKEND=redis-test:6379/15
+    volumes:
+      - ./app:/app/app
+      - ./tests:/app/tests
+      - test_coverage:/app/htmlcov
+    depends_on:
+      - db-test
+      - redis-test
+    command: >
+      sh -c "
+        echo 'Waiting for database...' &&
+        while ! nc -z db-test 5432; do sleep 1; done &&
+        alembic upgrade head &&
+        pytest tests/e2e/ -v --cov-append -m 'not slow'
+      "
+
+  # Linting and formatting checks
+  lint:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: testing
+    volumes:
+      - ./app:/app/app
+      - ./tests:/app/tests
+    command: >
+      sh -c "
+        echo 'Running Black formatter check...' &&
+        black --check app tests &&
+        echo 'Running isort import sorting check...' &&
+        isort --check-only app tests &&
+        echo 'Running flake8 linting...' &&
+        flake8 app tests &&
+        echo 'Running mypy type checking...' &&
+        mypy app
+      "
+
+  # Security scanning
+  security:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: testing
+    volumes:
+      - ./app:/app/app
+      - ./requirements:/app/requirements
+    command: >
+      sh -c "
+        echo 'Running bandit security scanner...' &&
+        bandit -r app/ -f json -o security-report.json &&
+        echo 'Running safety dependency scanner...' &&
+        safety check --json --output safety-report.json
+      "
+
+volumes:
+  test_postgres_data:
+  test_coverage:
+
+networks:
+  default:
+    name: transcription_test_network
+    driver: bridge

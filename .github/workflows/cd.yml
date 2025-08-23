@@ -1,0 +1,316 @@
+name: CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  workflow_run:
+    workflows: ["CI Pipeline"]
+    types:
+      - completed
+    branches: [ main ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  # Build and push Docker images
+  build-and-push:
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success' || github.event_name == 'push'
+    permissions:
+      contents: read
+      packages: write
+    
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+      image-digest: ${{ steps.build.outputs.digest }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=semver,pattern={{major}}
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: Build and push Docker image
+      id: build
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        target: production
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        platforms: linux/amd64,linux/arm64
+
+  # Security scanning of the built image
+  security-scan:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    permissions:
+      security-events: write
+    
+    steps:
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: ${{ needs.build-and-push.outputs.image-tag }}
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+  # Deploy to staging environment
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: [build-and-push, security-scan]
+    environment: staging
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Deploy to staging
+      env:
+        IMAGE_TAG: ${{ needs.build-and-push.outputs.image-tag }}
+        STAGING_HOST: ${{ secrets.STAGING_HOST }}
+        STAGING_USER: ${{ secrets.STAGING_USER }}
+        STAGING_SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+      run: |
+        echo "Deploying $IMAGE_TAG to staging environment"
+        # Add deployment commands here
+        # This could use SSH, kubectl, docker-compose, etc.
+        
+        # Example SSH deployment:
+        # echo "$STAGING_SSH_KEY" > staging_key
+        # chmod 600 staging_key
+        # ssh -i staging_key $STAGING_USER@$STAGING_HOST "docker pull $IMAGE_TAG && docker-compose up -d"
+
+    - name: Run smoke tests on staging
+      run: |
+        echo "Running smoke tests on staging"
+        # Add smoke test commands here
+        # curl -f https://staging.transcription-service.com/health
+
+  # Performance tests on staging
+  performance-tests:
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    environment: staging
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install performance testing tools
+      run: |
+        pip install locust requests
+
+    - name: Run performance tests
+      env:
+        STAGING_URL: ${{ secrets.STAGING_URL }}
+      run: |
+        echo "Running performance tests against staging"
+        # locust -f tests/performance/locustfile.py --host=$STAGING_URL --users=10 --spawn-rate=2 --run-time=5m --headless
+
+  # Deploy to production
+  deploy-production:
+    runs-on: ubuntu-latest
+    needs: [build-and-push, security-scan, deploy-staging, performance-tests]
+    environment: production
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Deploy to production
+      env:
+        IMAGE_TAG: ${{ needs.build-and-push.outputs.image-tag }}
+        PRODUCTION_HOST: ${{ secrets.PRODUCTION_HOST }}
+        PRODUCTION_USER: ${{ secrets.PRODUCTION_USER }}
+        PRODUCTION_SSH_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
+        KUBERNETES_CONFIG: ${{ secrets.KUBERNETES_CONFIG }}
+      run: |
+        echo "Deploying $IMAGE_TAG to production environment"
+        
+        # Example Kubernetes deployment:
+        # echo "$KUBERNETES_CONFIG" | base64 -d > kubeconfig
+        # export KUBECONFIG=kubeconfig
+        # kubectl set image deployment/transcription-service app=$IMAGE_TAG
+        # kubectl rollout status deployment/transcription-service
+
+    - name: Run post-deployment tests
+      env:
+        PRODUCTION_URL: ${{ secrets.PRODUCTION_URL }}
+      run: |
+        echo "Running post-deployment tests"
+        # curl -f $PRODUCTION_URL/health
+        # python scripts/verify_deployment.py
+
+  # Rollback capability
+  rollback:
+    runs-on: ubuntu-latest
+    if: failure() && github.ref == 'refs/heads/main'
+    needs: [deploy-production]
+    environment: production
+    
+    steps:
+    - name: Rollback production deployment
+      env:
+        PRODUCTION_HOST: ${{ secrets.PRODUCTION_HOST }}
+        PRODUCTION_USER: ${{ secrets.PRODUCTION_USER }}
+        PRODUCTION_SSH_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
+      run: |
+        echo "Rolling back production deployment"
+        # Add rollback commands here
+        # kubectl rollout undo deployment/transcription-service
+
+  # Database migrations
+  migrate-database:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install dependencies
+      run: |
+        pip install poetry
+        poetry install --no-dev
+
+    - name: Run database migrations
+      env:
+        DB_URL: ${{ secrets.PRODUCTION_DB_URL }}
+      run: |
+        echo "Running database migrations"
+        poetry run alembic upgrade head
+
+  # Update documentation
+  update-docs:
+    runs-on: ubuntu-latest
+    needs: deploy-production
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Generate API documentation
+      run: |
+        pip install poetry
+        poetry install --no-dev
+        # Generate OpenAPI spec
+        # poetry run python scripts/generate_openapi.py
+
+    - name: Update documentation site
+      run: |
+        echo "Updating documentation"
+        # Deploy to GitHub Pages or documentation site
+
+  # Notify teams
+  notify-deployment:
+    runs-on: ubuntu-latest
+    needs: [deploy-production]
+    if: always()
+    
+    steps:
+    - name: Notify success
+      if: needs.deploy-production.result == 'success'
+      run: |
+        echo "✅ Production deployment successful!"
+        # Send notification to Slack, Teams, etc.
+        # curl -X POST -H 'Content-type: application/json' \
+        #   --data '{"text":"🚀 Transcription Service deployed to production successfully!"}' \
+        #   ${{ secrets.SLACK_WEBHOOK_URL }}
+
+    - name: Notify failure
+      if: needs.deploy-production.result == 'failure'
+      run: |
+        echo "❌ Production deployment failed!"
+        # Send failure notification
+        # curl -X POST -H 'Content-type: application/json' \
+        #   --data '{"text":"🚨 Transcription Service deployment to production failed!"}' \
+        #   ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # Cleanup old images
+  cleanup:
+    runs-on: ubuntu-latest
+    needs: [deploy-production]
+    if: always()
+    
+    steps:
+    - name: Cleanup old container images
+      run: |
+        echo "Cleaning up old container images"
+        # Keep only the last 10 images
+        # gh api repos/${{ github.repository }}/packages/container/transcription-service/versions \
+        #   --jq '.[10:] | .[].id' | xargs -I {} gh api --method DELETE \
+        #   repos/${{ github.repository }}/packages/container/transcription-service/versions/{}
+
+  # Post-deployment monitoring
+  post-deployment-monitoring:
+    runs-on: ubuntu-latest
+    needs: deploy-production
+    if: needs.deploy-production.result == 'success'
+    
+    steps:
+    - name: Setup monitoring alerts
+      run: |
+        echo "Setting up post-deployment monitoring"
+        # Configure monitoring alerts for new deployment
+        # Check error rates, response times, etc.
+
+    - name: Warm up services
+      run: |
+        echo "Warming up production services"
+        # Make initial requests to warm up the application
+        # curl ${{ secrets.PRODUCTION_URL }}/health

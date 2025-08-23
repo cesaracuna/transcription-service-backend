@@ -1,0 +1,332 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: transcription-service
+  namespace: transcription-service
+  labels:
+    app: transcription-service
+    version: v1
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: transcription-service
+  template:
+    metadata:
+      labels:
+        app: transcription-service
+        version: v1
+    spec:
+      imagePullSecrets:
+      - name: registry-secret
+      containers:
+      - name: app
+        image: ghcr.io/yourusername/transcription-service:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: DB_URL
+          value: "postgresql://$(DB_USER):$(DB_PASSWORD)@$(DB_HOST):$(DB_PORT)/$(DB_NAME)"
+        - name: DB_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: transcription-service-config
+              key: DB_HOST
+        - name: DB_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: transcription-service-config
+              key: DB_PORT
+        - name: DB_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: transcription-service-config
+              key: DB_NAME
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secrets
+              key: POSTGRES_USER
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secrets
+              key: POSTGRES_PASSWORD
+        - name: REDIS_URL
+          value: "redis://$(REDIS_HOST):$(REDIS_PORT)/$(REDIS_DB)"
+        - name: REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: transcription-service-config
+              key: REDIS_HOST
+        - name: REDIS_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: transcription-service-config
+              key: REDIS_PORT
+        - name: REDIS_DB
+          valueFrom:
+            configMapKeyRef:
+              name: transcription-service-config
+              key: REDIS_DB
+        - name: CELERY_BROKER_URL
+          value: "redis://$(CELERY_BROKER_HOST):6379/0"
+        - name: CELERY_RESULT_BACKEND
+          value: "redis://$(CELERY_RESULT_BACKEND_HOST):6379/0"
+        - name: CELERY_BROKER_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: transcription-service-config
+              key: CELERY_BROKER_HOST
+        - name: CELERY_RESULT_BACKEND_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: transcription-service-config
+              key: CELERY_RESULT_BACKEND_HOST
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: transcription-service-secrets
+              key: SECRET_KEY
+        - name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: transcription-service-secrets
+              key: HF_TOKEN
+        envFrom:
+        - configMapRef:
+            name: transcription-service-config
+        volumeMounts:
+        - name: audio-files
+          mountPath: /app/data/audio_files
+        - name: ai-models
+          mountPath: /app/models
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30
+      volumes:
+      - name: audio-files
+        persistentVolumeClaim:
+          claimName: audio-files-pvc
+      - name: ai-models
+        persistentVolumeClaim:
+          claimName: ai-models-pvc
+      initContainers:
+      - name: migration
+        image: ghcr.io/yourusername/transcription-service:latest
+        command: ['alembic', 'upgrade', 'head']
+        env:
+        - name: DB_URL
+          value: "postgresql://$(DB_USER):$(DB_PASSWORD)@$(DB_HOST):$(DB_PORT)/$(DB_NAME)"
+        - name: DB_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: transcription-service-config
+              key: DB_HOST
+        - name: DB_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: transcription-service-config
+              key: DB_PORT
+        - name: DB_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: transcription-service-config
+              key: DB_NAME
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secrets
+              key: POSTGRES_USER
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secrets
+              key: POSTGRES_PASSWORD
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: transcription-service
+  namespace: transcription-service
+  labels:
+    app: transcription-service
+spec:
+  selector:
+    app: transcription-service
+  ports:
+  - port: 8000
+    targetPort: 8000
+    protocol: TCP
+  type: ClusterIP
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-worker
+  namespace: transcription-service
+  labels:
+    app: celery-worker
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: celery-worker
+  template:
+    metadata:
+      labels:
+        app: celery-worker
+    spec:
+      imagePullSecrets:
+      - name: registry-secret
+      containers:
+      - name: worker
+        image: ghcr.io/yourusername/transcription-service:latest
+        command: ['celery', '-A', 'app.infrastructure.workers.celery_app', 'worker', '--loglevel=info', '--concurrency=2']
+        env:
+        - name: DB_URL
+          value: "postgresql://$(DB_USER):$(DB_PASSWORD)@$(DB_HOST):$(DB_PORT)/$(DB_NAME)"
+        - name: DB_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: transcription-service-config
+              key: DB_HOST
+        - name: DB_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: transcription-service-config
+              key: DB_PORT
+        - name: DB_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: transcription-service-config
+              key: DB_NAME
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secrets
+              key: POSTGRES_USER
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secrets
+              key: POSTGRES_PASSWORD
+        - name: CELERY_BROKER_URL
+          value: "redis://$(CELERY_BROKER_HOST):6379/0"
+        - name: CELERY_RESULT_BACKEND
+          value: "redis://$(CELERY_RESULT_BACKEND_HOST):6379/0"
+        - name: CELERY_BROKER_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: transcription-service-config
+              key: CELERY_BROKER_HOST
+        - name: CELERY_RESULT_BACKEND_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: transcription-service-config
+              key: CELERY_RESULT_BACKEND_HOST
+        - name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: transcription-service-secrets
+              key: HF_TOKEN
+        envFrom:
+        - configMapRef:
+            name: transcription-service-config
+        volumeMounts:
+        - name: audio-files
+          mountPath: /app/data/audio_files
+        - name: ai-models
+          mountPath: /app/models
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "500m"
+          limits:
+            memory: "4Gi"
+            cpu: "2"
+      volumes:
+      - name: audio-files
+        persistentVolumeClaim:
+          claimName: audio-files-pvc
+      - name: ai-models
+        persistentVolumeClaim:
+          claimName: ai-models-pvc
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-beat
+  namespace: transcription-service
+  labels:
+    app: celery-beat
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: celery-beat
+  template:
+    metadata:
+      labels:
+        app: celery-beat
+    spec:
+      imagePullSecrets:
+      - name: registry-secret
+      containers:
+      - name: beat
+        image: ghcr.io/yourusername/transcription-service:latest
+        command: ['celery', '-A', 'app.infrastructure.workers.celery_app', 'beat', '--loglevel=info']
+        env:
+        - name: CELERY_BROKER_URL
+          value: "redis://$(CELERY_BROKER_HOST):6379/0"
+        - name: CELERY_RESULT_BACKEND
+          value: "redis://$(CELERY_RESULT_BACKEND_HOST):6379/0"
+        - name: CELERY_BROKER_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: transcription-service-config
+              key: CELERY_BROKER_HOST
+        - name: CELERY_RESULT_BACKEND_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: transcription-service-config
+              key: CELERY_RESULT_BACKEND_HOST
+        envFrom:
+        - configMapRef:
+            name: transcription-service-config
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"

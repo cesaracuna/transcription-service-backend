@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: transcription-service
+  labels:
+    app: transcription-service
+    environment: production
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: transcription-service-quota
+  namespace: transcription-service
+spec:
+  hard:
+    requests.cpu: "4"
+    requests.memory: 8Gi
+    limits.cpu: "8"
+    limits.memory: 16Gi
+    persistentvolumeclaims: "10"
+    services: "10"
+    secrets: "10"
+    configmaps: "10"
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: transcription-service-limits
+  namespace: transcription-service
+spec:
+  limits:
+  - default:
+      cpu: "1"
+      memory: 2Gi
+    defaultRequest:
+      cpu: "0.1"
+      memory: 256Mi
+    type: Container

@@ -1,0 +1,6 @@
+# Install AI requirements first
+-r ai.txt
+
+# Evaluation and metrics
+evaluate
+jiwer
