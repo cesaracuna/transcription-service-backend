@@ -47,6 +47,22 @@ class Language(str, Enum):
     UNKNOWN = "unknown"
 
 
+class LanguageCode(str, Enum):
+    """ISO language codes."""
+    ENGLISH = "en"
+    SPANISH = "es"
+    FRENCH = "fr"
+    PORTUGUESE = "pt"
+    GERMAN = "de"
+    ITALIAN = "it"
+    CHINESE = "zh"
+    JAPANESE = "ja"
+    KOREAN = "ko"
+    RUSSIAN = "ru"
+    ARABIC = "ar"
+    UNKNOWN = "unknown"
+
+
 class DeviceType(str, Enum):
     """Computing device types."""
     CPU = "cpu"
@@ -67,3 +83,19 @@ class LogLevel(str, Enum):
     WARNING = "WARNING"
     ERROR = "ERROR"
     CRITICAL = "CRITICAL"
+
+
+class SegmentType(str, Enum):
+    """Transcription segment types."""
+    SPEECH = "speech"
+    SILENCE = "silence"
+    NOISE = "noise"
+    MUSIC = "music"
+
+
+class ConfidenceLevel(str, Enum):
+    """Confidence level categories."""
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+    VERY_LOW = "very_low"

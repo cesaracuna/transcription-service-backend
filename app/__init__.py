@@ -25,12 +25,16 @@ from .core.exceptions import (
 
 # Import domain models and API components if they exist
 try:
-    from .domain.transcription.models import User, TranscriptionJob, TranscriptionSegment
     from .domain.shared.enums import JobStatus, SegmentType, ConfidenceLevel
+except ImportError:
+    # Domain enums not fully implemented yet
+    JobStatus = SegmentType = ConfidenceLevel = None
+
+try:
+    from .domain.transcription.models import User, TranscriptionJob, TranscriptionSegment
 except ImportError:
     # Domain models not implemented yet
     User = TranscriptionJob = TranscriptionSegment = None
-    JobStatus = SegmentType = ConfidenceLevel = None
 
 try:
     from .api.v1 import api_router as api_v1_router

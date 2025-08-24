@@ -14,59 +14,85 @@ the core business logic of the transcription service.
 """
 
 # Import domain models
-from .transcription.models import (
-    User,
-    TranscriptionJob,
-    TranscriptionSegment,
-    DiarizationSegment,
-    Hallucination
-)
+try:
+    from .transcription.models import (
+        User,
+        TranscriptionJob,
+        TranscriptionSegment,
+        DiarizationSegment,
+        Hallucination
+    )
+except ImportError:
+    User = TranscriptionJob = TranscriptionSegment = None
+    DiarizationSegment = Hallucination = None
 
 # Import domain services
-from .transcription.services import (
-    TranscriptionService,
-    UserService,
-    AudioProcessingService,
-    HallucinationDetectionService
-)
+try:
+    from .transcription.services import (
+        TranscriptionService,
+        UserService,
+        AudioProcessingService,
+        HallucinationDetectionService
+    )
+except ImportError:
+    TranscriptionService = UserService = AudioProcessingService = None
+    HallucinationDetectionService = None
 
 # Import repository interfaces
-from .transcription.repositories import (
-    UserRepository,
-    TranscriptionJobRepository,
-    TranscriptionSegmentRepository,
-    DiarizationSegmentRepository,
-    HallucinationRepository
-)
+try:
+    from .transcription.repositories import (
+        UserRepository,
+        TranscriptionJobRepository,
+        TranscriptionSegmentRepository,
+        DiarizationSegmentRepository,
+        HallucinationRepository
+    )
+except ImportError:
+    UserRepository = TranscriptionJobRepository = TranscriptionSegmentRepository = None
+    DiarizationSegmentRepository = HallucinationRepository = None
 
 # Import shared domain components
-from .shared.enums import (
-    JobStatus,
-    SegmentType,
-    ConfidenceLevel,
-    DeviceType,
-    ModelType
-)
+try:
+    from .shared.enums import (
+        JobStatus,
+        SegmentType,
+        ConfidenceLevel,
+        DeviceType,
+        ModelType
+    )
+except ImportError:
+    JobStatus = SegmentType = ConfidenceLevel = None
+    DeviceType = ModelType = None
 
-from .shared.value_objects import (
-    AudioMetadata,
-    TranscriptionResult,
-    ModelConfiguration
-)
+try:
+    from .shared.value_objects import (
+        AudioMetadata,
+        TranscriptionResult,
+        ModelConfiguration
+    )
+except ImportError:
+    AudioMetadata = TranscriptionResult = ModelConfiguration = None
 
-from .shared.exceptions import (
-    DomainValidationError,
-    BusinessRuleViolationError,
-    ResourceNotFoundError
-)
+try:
+    from .shared.exceptions import (
+        DomainValidationError,
+        BusinessRuleViolationError,
+        ResourceNotFoundError
+    )
+except ImportError:
+    DomainValidationError = BusinessRuleViolationError = ResourceNotFoundError = None
 
-from .shared.events import (
-    DomainEvent,
-    JobCreatedEvent,
-    JobCompletedEvent,
-    JobFailedEvent,
-    UserRegisteredEvent
-)
+try:
+    from .shared.events import (
+        DomainEvent,
+        JobCreatedEvent,
+        JobCompletedEvent,
+        JobFailedEvent,
+        UserRegisteredEvent
+    )
+except ImportError:
+    DomainEvent = JobCreatedEvent = JobCompletedEvent = None
+    JobFailedEvent = UserRegisteredEvent = None
 
 __all__ = [
     # Domain models

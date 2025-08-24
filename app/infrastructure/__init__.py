@@ -37,39 +37,62 @@ from .external import (
     close_redis_client
 )
 
-# Import AI model components
-from .external.ai_models import (
+# Import AI model components from external module (with graceful handling)
+from .external import (
     ModelRegistry,
+    AIModelRegistry,
     WhisperModelManager,
     DiarizationModelManager,
-    get_model_registry
+    get_model_registry,
+    initialize_models,
+    cleanup_models
 )
 
 # Import storage components
-from .storage import (
-    FileManager,
-    AudioFileManager,
-    LocalFileStorage,
-    S3FileStorage,
-    get_file_manager
-)
+try:
+    from .storage import (
+        FileManager,
+        AudioFileManager,
+        LocalFileStorage,
+        S3FileStorage,
+        get_file_manager
+    )
+except ImportError:
+    FileManager = None
+    AudioFileManager = None
+    LocalFileStorage = None
+    S3FileStorage = None
+    get_file_manager = None
 
 # Import worker components
-from .workers import (
-    celery_app,
-    transcription_task,
-    diarization_task,
-    hallucination_detection_task,
-    cleanup_task
-)
+try:
+    from .workers import (
+        celery_app,
+        transcription_task,
+        diarization_task,
+        hallucination_detection_task,
+        cleanup_task
+    )
+except ImportError:
+    celery_app = None
+    transcription_task = None
+    diarization_task = None
+    hallucination_detection_task = None
+    cleanup_task = None
 
 # Import event handlers
-from .events import (
-    DomainEventDispatcher,
-    JobCreatedEventHandler,
-    JobCompletedEventHandler,
-    UserRegisteredEventHandler
-)
+try:
+    from .events import (
+        DomainEventDispatcher,
+        JobCreatedEventHandler,
+        JobCompletedEventHandler,
+        UserRegisteredEventHandler
+    )
+except ImportError:
+    DomainEventDispatcher = None
+    JobCreatedEventHandler = None
+    JobCompletedEventHandler = None
+    UserRegisteredEventHandler = None
 
 __all__ = [
     # Database
@@ -92,8 +115,11 @@ __all__ = [
     
     # AI models
     "ModelRegistry",
+    "AIModelRegistry", 
     "WhisperModelManager",
     "DiarizationModelManager",
+    "initialize_models",
+    "cleanup_models",
     "get_model_registry",
     
     # Storage

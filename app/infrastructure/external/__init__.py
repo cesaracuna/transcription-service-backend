@@ -16,40 +16,74 @@ from .redis_client import (
     close_redis_client
 )
 
-from .ai_models import (
-    ModelRegistry,
-    WhisperModelManager,
-    DiarizationModelManager,
-    HallucinationDetectionModelManager,
-    get_model_registry,
-    initialize_models,
-    cleanup_models
-)
+try:
+    from .ai_models import (
+        AIModelRegistry,
+        WhisperModelManager,
+        DiarizationModelManager,
+        HallucinationDetectionModelManager,
+        get_model_registry,
+        initialize_models,
+        cleanup_models
+    )
+    # Alias for compatibility
+    ModelRegistry = AIModelRegistry
+except ImportError:
+    # Fallback when AI models are not available (missing dependencies)
+    AIModelRegistry = None
+    ModelRegistry = None
+    WhisperModelManager = None
+    DiarizationModelManager = None
+    HallucinationDetectionModelManager = None
+    get_model_registry = None
+    initialize_models = None
+    cleanup_models = None
 
-from .http_client import (
-    HTTPClient,
-    get_http_client,
-    close_http_client
-)
+try:
+    from .http_client import (
+        HTTPClient,
+        get_http_client,
+        close_http_client
+    )
+except ImportError:
+    HTTPClient = None
+    get_http_client = None
+    close_http_client = None
 
-from .storage_services import (
-    S3Client,
-    GCSClient,
-    get_cloud_storage_client
-)
+try:
+    from .storage_services import (
+        S3Client,
+        GCSClient,
+        get_cloud_storage_client
+    )
+except ImportError:
+    S3Client = None
+    GCSClient = None
+    get_cloud_storage_client = None
 
-from .monitoring import (
-    PrometheusMetrics,
-    TelemetryClient,
-    get_telemetry_client
-)
+try:
+    from .monitoring import (
+        PrometheusMetrics,
+        TelemetryClient,
+        get_telemetry_client
+    )
+except ImportError:
+    PrometheusMetrics = None
+    TelemetryClient = None
+    get_telemetry_client = None
 
-from .notification import (
-    EmailService,
-    SlackNotifier,
-    WebhookNotifier,
-    get_notification_service
-)
+try:
+    from .notification import (
+        EmailService,
+        SlackNotifier,
+        WebhookNotifier,
+        get_notification_service
+    )
+except ImportError:
+    EmailService = None
+    SlackNotifier = None
+    WebhookNotifier = None
+    get_notification_service = None
 
 __all__ = [
     # Redis
@@ -58,6 +92,7 @@ __all__ = [
     "close_redis_client",
     
     # AI Models
+    "AIModelRegistry",
     "ModelRegistry",
     "WhisperModelManager",
     "DiarizationModelManager",

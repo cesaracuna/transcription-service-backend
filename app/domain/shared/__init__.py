@@ -12,68 +12,94 @@ bounded contexts within the transcription service:
 """
 
 # Import enumerations
-from .enums import (
-    JobStatus,
-    SegmentType,
-    ConfidenceLevel,
-    DeviceType,
-    ModelType,
-    AudioFormat,
-    LanguageCode
-)
+try:
+    from .enums import (
+        JobStatus,
+        SegmentType,
+        ConfidenceLevel,
+        DeviceType,
+        ModelType,
+        AudioFormat,
+        LanguageCode
+    )
+except ImportError:
+    JobStatus = SegmentType = ConfidenceLevel = None
+    DeviceType = ModelType = AudioFormat = LanguageCode = None
 
 # Import value objects
-from .value_objects import (
-    AudioMetadata,
-    TranscriptionResult,
-    ModelConfiguration,
-    TimeRange,
-    SpeakerInfo,
-    ProcessingStats
-)
+try:
+    from .value_objects import (
+        AudioMetadata,
+        TranscriptionResult,
+        ModelConfiguration,
+        TimeRange,
+        SpeakerInfo,
+        ProcessingStats
+    )
+except ImportError:
+    AudioMetadata = TranscriptionResult = ModelConfiguration = None
+    TimeRange = SpeakerInfo = ProcessingStats = None
 
 # Import exceptions
-from .exceptions import (
-    DomainException,
-    DomainValidationError,
-    BusinessRuleViolationError,
-    ResourceNotFoundError,
-    InvalidOperationError,
-    ConcurrencyError
-)
+try:
+    from .exceptions import (
+        DomainException,
+        DomainValidationError,
+        BusinessRuleViolationError,
+        ResourceNotFoundError,
+        InvalidOperationError,
+        ConcurrencyError
+    )
+except ImportError:
+    DomainException = DomainValidationError = BusinessRuleViolationError = None
+    ResourceNotFoundError = InvalidOperationError = ConcurrencyError = None
 
 # Import domain events
-from .events import (
-    DomainEvent,
-    DomainEventHandler,
-    EventBus,
-    JobCreatedEvent,
-    JobStatusChangedEvent,
-    JobCompletedEvent,
-    JobFailedEvent,
-    UserRegisteredEvent,
-    UserUpdatedEvent
-)
+try:
+    from .events import (
+        DomainEvent,
+        DomainEventHandler,
+        EventBus,
+        JobCreatedEvent,
+        JobStatusChangedEvent,
+        JobCompletedEvent,
+        JobFailedEvent,
+        UserRegisteredEvent,
+        UserUpdatedEvent
+    )
+except ImportError:
+    DomainEvent = DomainEventHandler = EventBus = None
+    JobCreatedEvent = JobStatusChangedEvent = JobCompletedEvent = None
+    JobFailedEvent = UserRegisteredEvent = UserUpdatedEvent = None
 
 # Import base classes
-from .base import (
-    Entity,
-    ValueObject,
-    AggregateRoot,
-    DomainService,
-    Repository
-)
+try:
+    from .base import (
+        Entity,
+        ValueObject,
+        AggregateRoot,
+        DomainService,
+        Repository
+    )
+except ImportError:
+    Entity = ValueObject = AggregateRoot = None
+    DomainService = Repository = None
 
 # Import specifications
-from .specifications import (
-    Specification,
-    AndSpecification,
-    OrSpecification,
-    NotSpecification,
-    JobCanBeProcessedSpecification,
-    UserCanCreateJobSpecification,
-    AudioFileIsValidSpecification
-)
+try:
+    from .specifications import (
+        Specification,
+        AndSpecification,
+        OrSpecification,
+        NotSpecification,
+        JobCanBeProcessedSpecification,
+        UserCanCreateJobSpecification,
+        AudioFileIsValidSpecification
+    )
+except ImportError:
+    Specification = AndSpecification = OrSpecification = None
+    NotSpecification = JobCanBeProcessedSpecification = None
+    UserCanCreateJobSpecification = AudioFileIsValidSpecification = None
 
 __all__ = [
     # Enumerations
