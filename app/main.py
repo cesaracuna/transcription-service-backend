@@ -26,8 +26,10 @@ from .core import (
     TranscriptionServiceError,
     ValidationError,
     ResourceNotFoundError,
-    DatabaseError
+    DatabaseError,
+    ServiceUnavailableError
 )
+from .domain.shared.exceptions import DomainValidationError, BusinessRuleViolationError
 from .utils import get_utc_now
 from .api import api_v1_router
 from .infrastructure import (
@@ -259,8 +261,8 @@ def configure_exception_handlers(app: FastAPI) -> None:
             }
         )
     
-    @app.exception_handler(ExternalServiceError)
-    async def external_service_error_handler(request: Request, exc: ExternalServiceError):
+    @app.exception_handler(ServiceUnavailableError)
+    async def external_service_error_handler(request: Request, exc: ServiceUnavailableError):
         """Handle external service errors."""
         logger.error(f"External service error: {str(exc)}", exc_info=True)
         return JSONResponse(

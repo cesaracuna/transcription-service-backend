@@ -47,12 +47,23 @@ try:
         DomainValidationError,
         BusinessRuleViolationError,
         ResourceNotFoundError,
-        InvalidOperationError,
-        ConcurrencyError
+        ConcurrencyConflictError,
+        DomainStateError,
+        InvariantViolationError,
+        TranscriptionJobError,
+        InvalidJobStateError,
+        AudioFileError,
+        SpeakerDiarizationError,
+        HallucinationDetectionError,
+        UserError,
+        UserValidationError
     )
 except ImportError:
     DomainException = DomainValidationError = BusinessRuleViolationError = None
-    ResourceNotFoundError = InvalidOperationError = ConcurrencyError = None
+    ResourceNotFoundError = ConcurrencyConflictError = DomainStateError = None
+    InvariantViolationError = TranscriptionJobError = InvalidJobStateError = None
+    AudioFileError = SpeakerDiarizationError = HallucinationDetectionError = None
+    UserError = UserValidationError = None
 
 # Import domain events
 try:
@@ -124,8 +135,16 @@ __all__ = [
     "DomainValidationError",
     "BusinessRuleViolationError",
     "ResourceNotFoundError",
-    "InvalidOperationError",
-    "ConcurrencyError",
+    "ConcurrencyConflictError",
+    "DomainStateError",
+    "InvariantViolationError",
+    "TranscriptionJobError",
+    "InvalidJobStateError",
+    "AudioFileError",
+    "SpeakerDiarizationError",
+    "HallucinationDetectionError",
+    "UserError",
+    "UserValidationError",
     
     # Domain events
     "DomainEvent",
