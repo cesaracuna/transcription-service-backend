@@ -75,3 +75,11 @@ class UserStatsResponse(BaseSchema):
     total_audio_duration: float = Field(..., description="Total audio duration processed (seconds)")
     total_segments: int = Field(..., description="Total number of segments created")
     account_created: datetime = Field(..., description="Account creation date")
+
+
+# Aliases for compatibility
+UserCreateRequest = UserCreate
+UserResponse = User
+UserUpdateRequest = UserUpdate
+UserJobsResponse = UserSummary  # Could also be a list of jobs, but using summary for now
+UserStatisticsResponse = UserStatsResponse

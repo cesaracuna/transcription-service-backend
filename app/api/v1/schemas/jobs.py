@@ -155,3 +155,10 @@ class JobProgressResponse(BaseSchema):
     progress_percentage: float = Field(..., ge=0, le=100, description="Progress percentage")
     estimated_completion: Optional[datetime] = Field(None, description="Estimated completion time")
     current_operation: Optional[str] = Field(None, description="Current operation description")
+
+
+# Aliases for compatibility
+JobResponse = Job
+JobStatusUpdateRequest = JobStatusUpdate
+TranscriptionResultResponse = Job
+SegmentResponse = TranscriptionSegment

@@ -241,7 +241,7 @@ async def get_user_jobs(
         )
 
 
-@router.delete("/{job_id}", response_model=JobDeleteResponse, status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{job_id}", response_model=JobDeleteResponse, status_code=status.HTTP_200_OK)
 async def delete_job(
     job_id: UUID,
     job_service: JobService = Depends(get_job_service)
@@ -281,7 +281,7 @@ async def delete_job(
         )
 
 
-@router.patch("/{job_id}/mark-as-viewed", response_model=JobViewedResponse, status_code=status.HTTP_204_NO_CONTENT)
+@router.patch("/{job_id}/mark-as-viewed", response_model=JobViewedResponse, status_code=status.HTTP_200_OK)
 async def mark_job_as_viewed(
     job_id: UUID,
     job_service: JobService = Depends(get_job_service)

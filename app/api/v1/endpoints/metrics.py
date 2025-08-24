@@ -3,17 +3,74 @@ Metrics endpoint for Prometheus monitoring.
 """
 
 from fastapi import APIRouter, Depends
-from prometheus_client import CollectorRegistry, Counter, Histogram, Gauge, generate_latest
-from prometheus_client.exposition import make_wsgi_app
 from starlette.responses import Response
 import time
 from typing import Dict, Any
 
-from ....core.dependencies import get_current_user
-from ....domain.transcription.repositories import TranscriptionJobRepository
-from ....infrastructure.database.repositories.transcription_job_repository import get_transcription_job_repository
-from ....infrastructure.external.redis_client import get_redis_client
-from ....infrastructure.external.ai_models import get_model_registry
+# Graceful prometheus_client import
+try:
+    from prometheus_client import CollectorRegistry, Counter, Histogram, Gauge, generate_latest
+    from prometheus_client.exposition import make_wsgi_app
+    PROMETHEUS_AVAILABLE = True
+except ImportError:
+    # Mock classes for when prometheus_client is not available
+    class CollectorRegistry:
+        pass
+    
+    class Counter:
+        def __init__(self, *args, **kwargs):
+            pass
+        def labels(self, **kwargs):
+            return self
+        def inc(self):
+            pass
+    
+    class Histogram:
+        def __init__(self, *args, **kwargs):
+            pass
+        def labels(self, **kwargs):
+            return self
+        def observe(self, value):
+            pass
+    
+    class Gauge:
+        def __init__(self, *args, **kwargs):
+            pass
+        def labels(self, **kwargs):
+            return self
+        def set(self, value):
+            pass
+    
+    def generate_latest(registry):
+        return "# Prometheus client not available\n"
+    
+    def make_wsgi_app():
+        return None
+    
+    PROMETHEUS_AVAILABLE = False
+
+# Graceful imports for dependencies
+try:
+    from ....core.dependencies import get_current_user
+except ImportError:
+    get_current_user = None
+
+try:
+    from ....domain.transcription.repositories import TranscriptionJobRepository
+    from ....infrastructure.database.repositories.transcription_job_repository import get_transcription_job_repository
+except ImportError:
+    TranscriptionJobRepository = None
+    get_transcription_job_repository = None
+
+try:
+    from ....infrastructure.external.redis_client import get_redis_client
+except ImportError:
+    get_redis_client = None
+
+try:
+    from ....infrastructure.external.ai_models import get_model_registry
+except ImportError:
+    get_model_registry = None
 
 router = APIRouter()
 
@@ -191,6 +248,12 @@ redis_operation_duration_seconds = Histogram(
 @router.get("/metrics")
 async def metrics():
     """Expose Prometheus metrics."""
+    if not PROMETHEUS_AVAILABLE:
+        return Response(
+            "# Prometheus client not available\n# Install prometheus_client to enable metrics\n",
+            media_type="text/plain"
+        )
+    
     return Response(
         generate_latest(registry),
         media_type="text/plain"
@@ -198,11 +261,13 @@ async def metrics():
 
 
 @router.get("/metrics/business")
-async def business_metrics(
-    job_repository: TranscriptionJobRepository = Depends(get_transcription_job_repository)
-) -> Dict[str, Any]:
+async def business_metrics() -> Dict[str, Any]:
     """Get business-specific metrics."""
     try:
+        if get_transcription_job_repository is None:
+            return {"error": "Job repository not available"}
+        
+        job_repository = get_transcription_job_repository()
         # Get job statistics
         stats = await job_repository.get_overall_statistics()
         
@@ -233,12 +298,16 @@ async def system_metrics() -> Dict[str, Any]:
     """Get system health and performance metrics."""
     try:
         # Check Redis health
-        redis_client = await get_redis_client()
-        redis_healthy = await redis_client.is_connected()
+        redis_healthy = False
+        if get_redis_client is not None:
+            redis_client = await get_redis_client()
+            redis_healthy = await redis_client.is_connected()
         
         # Check AI models status
-        model_registry = get_model_registry()
-        models_info = model_registry.get_models_info()
+        models_info = {"whisper": None, "diarization": None, "total_models": 0, "initialization_status": False}
+        if get_model_registry is not None:
+            model_registry = get_model_registry()
+            models_info = model_registry.get_models_info()
         
         return {
             "redis": {
@@ -275,19 +344,24 @@ async def health_metrics() -> Dict[str, Any]:
         }
         
         # Redis health check
-        redis_client = await get_redis_client()
-        redis_start = time.time()
-        redis_healthy = await redis_client.is_connected()
-        redis_time = (time.time() - redis_start) * 1000
+        redis_healthy = False
+        redis_time = 0
+        if get_redis_client is not None:
+            redis_client = await get_redis_client()
+            redis_start = time.time()
+            redis_healthy = await redis_client.is_connected()
+            redis_time = (time.time() - redis_start) * 1000
         
         health_status["checks"]["redis"] = {
-            "status": "healthy" if redis_healthy else "unhealthy",
+            "status": "healthy" if redis_healthy else "unavailable",
             "response_time_ms": redis_time
         }
         
         # AI models health check
-        model_registry = get_model_registry()
-        models_info = model_registry.get_models_info()
+        models_info = {"whisper": None, "diarization": None, "total_models": 0, "initialization_status": False}
+        if get_model_registry is not None:
+            model_registry = get_model_registry()
+            models_info = model_registry.get_models_info()
         
         health_status["checks"]["ai_models"] = {
             "status": "healthy" if models_info["initialization_status"] else "unhealthy",

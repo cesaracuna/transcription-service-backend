@@ -87,3 +87,17 @@ class ProcessingMetrics(BaseModel):
     def real_time_factor(self) -> float:
         """Calculate real-time factor."""
         return self.processing_time / self.audio_duration if self.audio_duration > 0 else 0.0
+
+
+class MetricsResponse(BaseModel):
+    """Metrics response schema."""
+    system_metrics: Dict[str, Any] = Field(default_factory=dict, description="System metrics")
+    service_metrics: Dict[str, Any] = Field(default_factory=dict, description="Service metrics")
+    processing_metrics: Optional[ProcessingMetrics] = Field(None, description="Processing metrics")
+    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Metrics timestamp")
+
+
+class MessageResponse(BaseModel):
+    """Generic message response schema."""
+    message: str = Field(..., description="Response message")
+    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Response timestamp")
