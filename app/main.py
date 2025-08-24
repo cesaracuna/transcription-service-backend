@@ -66,8 +66,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             logger.warning("⚠️ Redis connection failed")
         
         logger.info("Initializing AI models...")
-        await initialize_models()
-        logger.info("✅ AI models initialized")
+        if initialize_models is not None:
+            await initialize_models()
+            logger.info("✅ AI models initialized")
+        else:
+            logger.warning("⚠️ AI models initialization skipped (dependencies not available)")
         
         logger.info("🎉 Application startup completed successfully")
         
@@ -82,7 +85,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         
         try:
             logger.info("Cleaning up AI models...")
-            await cleanup_models()
+            if cleanup_models is not None:
+                await cleanup_models()
+                logger.info("✅ AI models cleaned up")
+            else:
+                logger.info("⚠️ AI models cleanup skipped (not available)")
             
             logger.info("Closing Redis connection...")
             await close_redis_client()

@@ -461,7 +461,7 @@ def get_model_registry() -> AIModelRegistry:
     return _model_registry
 
 
-def initialize_ai_models(force_reload: bool = False) -> None:
+async def initialize_ai_models(force_reload: bool = False) -> None:
     """
     Initialize AI models using global registry.
     
@@ -470,3 +470,16 @@ def initialize_ai_models(force_reload: bool = False) -> None:
     """
     registry = get_model_registry()
     registry.initialize_models(force_reload=force_reload)
+
+
+async def cleanup_ai_models() -> None:
+    """
+    Cleanup AI models and free memory using global registry.
+    """
+    registry = get_model_registry()
+    registry.unload_all_models()
+
+
+# Aliases for compatibility
+initialize_models = initialize_ai_models
+cleanup_models = cleanup_ai_models
