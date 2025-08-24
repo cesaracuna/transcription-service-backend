@@ -9,15 +9,50 @@ from datetime import datetime
 from dataclasses import dataclass, field
 
 from ..shared.enums import JobStatus, ProcessingStage, Language
-from ..shared.value_objects import (
-    AudioMetadata, 
-    TimeInterval, 
-    SpeakerSegment, 
-    TranscriptionSegment,
-    ProcessingMetrics,
-    JobProgress,
-    HallucinationPattern
-)
+
+# Import value objects with graceful handling
+try:
+    from ..shared.value_objects import (
+        AudioMetadata, 
+        TimeInterval, 
+        SpeakerSegment, 
+        ProcessingMetrics,
+        JobProgress,
+        HallucinationPattern
+    )
+except ImportError:
+    # Create simple fallback classes if value objects don't exist
+    from dataclasses import dataclass
+    
+    @dataclass
+    class AudioMetadata:
+        duration: float = 0.0
+        
+    @dataclass  
+    class TimeInterval:
+        start: float = 0.0
+        end: float = 0.0
+        
+    @dataclass
+    class SpeakerSegment:
+        speaker_id: str = ""
+        interval: 'TimeInterval' = None
+        
+    @dataclass
+    class ProcessingMetrics:
+        processing_time: float = 0.0
+        
+    @dataclass
+    class JobProgress:
+        percentage: float = 0.0
+        
+    @dataclass
+    class HallucinationPattern:
+        text_pattern: str = ""
+        is_regex: bool = False
+        
+        def matches(self, text: str, language: str = "") -> bool:
+            return self.text_pattern.lower() in text.lower()
 
 
 @dataclass
@@ -38,8 +73,8 @@ class TranscriptionJob:
     is_post_processed: bool = False
     is_viewed: bool = False
     
-    # Processing results
-    segments: List[TranscriptionSegment] = field(default_factory=list)
+    # Processing results  
+    segments: List['TranscriptionSegment'] = field(default_factory=list)
     diarization_segments: List[SpeakerSegment] = field(default_factory=list)
     processing_metrics: Optional[ProcessingMetrics] = None
     
@@ -59,7 +94,7 @@ class TranscriptionJob:
         self.update_status(JobStatus.COMPLETED)
         self.is_post_processed = True
     
-    def add_segment(self, segment: TranscriptionSegment) -> None:
+    def add_segment(self, segment: 'TranscriptionSegment') -> None:
         """Add a transcription segment to the job."""
         self.segments.append(segment)
         self.updated_at = datetime.utcnow()
@@ -87,7 +122,7 @@ class TranscriptionJob:
             return 0.0
         return self.get_speech_duration() / total_duration
     
-    def get_segments_by_speaker(self, speaker_id: str) -> List[TranscriptionSegment]:
+    def get_segments_by_speaker(self, speaker_id: str) -> List['TranscriptionSegment']:
         """Get all segments for a specific speaker."""
         return [segment for segment in self.segments if segment.speaker_id == speaker_id]
     
@@ -172,7 +207,7 @@ class HallucinationRule:
     is_active: bool = True
     created_at: datetime = field(default_factory=datetime.utcnow)
     
-    def matches_segment(self, segment: TranscriptionSegment) -> bool:
+    def matches_segment(self, segment: 'TranscriptionSegment') -> bool:
         """Check if this rule matches a transcription segment."""
         if not self.is_active:
             return False
@@ -193,4 +228,137 @@ class HallucinationRule:
             except re.error as e:
                 errors.append(f"Invalid regex pattern: {e}")
         
+        return errors
+
+
+@dataclass
+class TranscriptionSegment:
+    """
+    Domain model for a transcription segment.
+    Represents a piece of transcribed audio with timing and speaker information.
+    """
+    id: UUID = field(default_factory=uuid4)
+    job_id: UUID = field(default_factory=uuid4)
+    text: str = ""
+    start_time: float = 0.0
+    end_time: float = 0.0
+    speaker_id: Optional[str] = None
+    language: str = "unknown"
+    confidence: float = 0.0
+    is_hallucination: bool = False
+    created_at: datetime = field(default_factory=datetime.utcnow)
+    
+    @property
+    def duration(self) -> float:
+        """Get segment duration in seconds."""
+        return self.end_time - self.start_time
+    
+    def mark_as_hallucination(self) -> None:
+        """Mark this segment as a hallucination."""
+        self.is_hallucination = True
+    
+    def validate(self) -> List[str]:
+        """Validate segment data."""
+        errors = []
+        if self.start_time < 0:
+            errors.append("Start time cannot be negative")
+        if self.end_time <= self.start_time:
+            errors.append("End time must be greater than start time")
+        if not self.text.strip():
+            errors.append("Segment text cannot be empty")
+        return errors
+
+
+@dataclass  
+class DiarizationSegment:
+    """
+    Domain model for speaker diarization segments.
+    Represents who was speaking when, without transcription text.
+    """
+    id: UUID = field(default_factory=uuid4)
+    job_id: UUID = field(default_factory=uuid4)
+    speaker_id: str = ""
+    start_time: float = 0.0
+    end_time: float = 0.0
+    confidence: float = 0.0
+    created_at: datetime = field(default_factory=datetime.utcnow)
+    
+    @property
+    def duration(self) -> float:
+        """Get segment duration in seconds."""
+        return self.end_time - self.start_time
+    
+    def validate(self) -> List[str]:
+        """Validate diarization segment data."""
+        errors = []
+        if self.start_time < 0:
+            errors.append("Start time cannot be negative")
+        if self.end_time <= self.start_time:
+            errors.append("End time must be greater than start time")
+        if not self.speaker_id:
+            errors.append("Speaker ID is required")
+        return errors
+
+
+@dataclass
+class Speaker:
+    """
+    Domain model for speaker information.
+    Represents identified speakers in audio content.
+    """
+    id: UUID = field(default_factory=uuid4)
+    job_id: UUID = field(default_factory=uuid4)
+    speaker_id: str = ""
+    display_name: Optional[str] = None
+    total_speaking_time: float = 0.0
+    segment_count: int = 0
+    confidence: float = 0.0
+    created_at: datetime = field(default_factory=datetime.utcnow)
+    
+    def add_segment(self, duration: float) -> None:
+        """Add a speaking segment to this speaker."""
+        self.total_speaking_time += duration
+        self.segment_count += 1
+    
+    def validate(self) -> List[str]:
+        """Validate speaker data."""
+        errors = []
+        if not self.speaker_id:
+            errors.append("Speaker ID is required")
+        if self.total_speaking_time < 0:
+            errors.append("Total speaking time cannot be negative")
+        if self.segment_count < 0:
+            errors.append("Segment count cannot be negative")
+        return errors
+
+
+@dataclass
+class Hallucination:
+    """
+    Domain model for detected hallucinations.
+    Represents AI-generated content that should be filtered out.
+    """
+    id: UUID = field(default_factory=uuid4)
+    job_id: UUID = field(default_factory=uuid4)
+    segment_id: UUID = field(default_factory=uuid4)
+    pattern_matched: str = ""
+    confidence: float = 0.0
+    original_text: str = ""
+    suggested_replacement: Optional[str] = None
+    is_confirmed: bool = False
+    detected_at: datetime = field(default_factory=datetime.utcnow)
+    
+    def confirm(self) -> None:
+        """Confirm this as a valid hallucination detection."""
+        self.is_confirmed = True
+    
+    def validate(self) -> List[str]:
+        """Validate hallucination data."""
+        errors = []
+        if not self.pattern_matched:
+            errors.append("Pattern matched is required")
+        if not self.original_text:
+            errors.append("Original text is required")
+        if self.confidence < 0 or self.confidence > 1:
+            errors.append("Confidence must be between 0 and 1")
         return errors

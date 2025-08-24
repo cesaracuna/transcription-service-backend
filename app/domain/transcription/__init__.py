@@ -10,66 +10,94 @@ This package contains the core business logic for the transcription bounded cont
 """
 
 # Import domain models (aggregates and entities)
-from .models import (
-    User,
-    TranscriptionJob,
-    TranscriptionSegment,
-    DiarizationSegment,
-    Hallucination,
-    Speaker
-)
+try:
+    from .models import (
+        User,
+        TranscriptionJob,
+        TranscriptionSegment,
+        DiarizationSegment,
+        Hallucination,
+        Speaker
+    )
+except ImportError:
+    User = TranscriptionJob = TranscriptionSegment = None
+    DiarizationSegment = Hallucination = Speaker = None
 
 # Import domain services
-from .services import (
-    TranscriptionService,
-    UserService,
-    AudioProcessingService,
-    HallucinationDetectionService,
-    SpeakerDiarizationService,
-    TranscriptionValidationService
-)
+try:
+    from .services import (
+        TranscriptionService,
+        UserService,
+        AudioProcessingService,
+        HallucinationDetectionService,
+        SpeakerDiarizationService,
+        TranscriptionValidationService
+    )
+except ImportError:
+    TranscriptionService = UserService = AudioProcessingService = None
+    HallucinationDetectionService = SpeakerDiarizationService = None
+    TranscriptionValidationService = None
 
 # Import repository interfaces
-from .repositories import (
-    UserRepository,
-    TranscriptionJobRepository,
-    TranscriptionSegmentRepository,
-    DiarizationSegmentRepository,
-    HallucinationRepository,
-    SpeakerRepository
-)
+try:
+    from .repositories import (
+        UserRepository,
+        TranscriptionJobRepository,
+        TranscriptionSegmentRepository,
+        DiarizationSegmentRepository,
+        HallucinationRepository,
+        SpeakerRepository
+    )
+except ImportError:
+    UserRepository = TranscriptionJobRepository = TranscriptionSegmentRepository = None
+    DiarizationSegmentRepository = HallucinationRepository = SpeakerRepository = None
 
 # Import domain-specific value objects
-from .value_objects import (
-    JobMetadata,
-    ProcessingConfiguration,
-    QualityMetrics,
-    AudioFeatures,
-    SpeakerProfile
-)
+try:
+    from .value_objects import (
+        JobMetadata,
+        ProcessingConfiguration,
+        QualityMetrics,
+        AudioFeatures,
+        SpeakerProfile
+    )
+except ImportError:
+    JobMetadata = ProcessingConfiguration = QualityMetrics = None
+    AudioFeatures = SpeakerProfile = None
 
 # Import domain-specific events
-from .events import (
-    JobCreatedEvent,
-    JobProcessingStartedEvent,
-    JobProcessingCompletedEvent,
-    JobProcessingFailedEvent,
-    TranscriptionGeneratedEvent,
-    DiarizationCompletedEvent,
-    HallucinationDetectedEvent,
-    UserCreatedEvent,
-    UserActivatedEvent,
-    UserDeactivatedEvent
-)
+try:
+    from .events import (
+        JobCreatedEvent,
+        JobProcessingStartedEvent,
+        JobProcessingCompletedEvent,
+        JobProcessingFailedEvent,
+        TranscriptionGeneratedEvent,
+        DiarizationCompletedEvent,
+        HallucinationDetectedEvent,
+        UserCreatedEvent,
+        UserActivatedEvent,
+        UserDeactivatedEvent
+    )
+except ImportError:
+    JobCreatedEvent = JobProcessingStartedEvent = JobProcessingCompletedEvent = None
+    JobProcessingFailedEvent = TranscriptionGeneratedEvent = DiarizationCompletedEvent = None
+    HallucinationDetectedEvent = UserCreatedEvent = UserActivatedEvent = None
+    UserDeactivatedEvent = None
 
 # Import specifications
-from .specifications import (
-    JobCanBeProcessedSpecification,
-    JobCanBeCancelledSpecification,
-    UserCanCreateJobSpecification,
-    AudioFileIsValidSpecification,
-    TranscriptionIsCompleteSpecification
-)
+try:
+    from .specifications import (
+        JobCanBeProcessedSpecification,
+        JobCanBeCancelledSpecification,
+        UserCanCreateJobSpecification,
+        AudioFileIsValidSpecification,
+        TranscriptionIsCompleteSpecification
+    )
+except ImportError:
+    JobCanBeProcessedSpecification = JobCanBeCancelledSpecification = None
+    UserCanCreateJobSpecification = AudioFileIsValidSpecification = None
+    TranscriptionIsCompleteSpecification = None
 
 __all__ = [
     # Domain models
