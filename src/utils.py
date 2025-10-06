@@ -12,7 +12,10 @@ from typing import List, Dict, Any, Optional, Tuple, Union
 from dataclasses import dataclass
 from collections import Counter, defaultdict
 
-from .constants import SILENCE_RMS_THRESHOLD
+from .config import get_config
+
+# Get configuration instance
+config = get_config()
 
 # Create module-specific logger
 logger = logging.getLogger(__name__)
@@ -232,7 +235,7 @@ def batch_parse_timestamps(timestamps: List[str]) -> Tuple[List[float], Timestam
     return results, metrics
 
 
-def is_silent(audio_chunk: np.ndarray, threshold: float = SILENCE_RMS_THRESHOLD) -> Tuple[float, bool]:
+def is_silent(audio_chunk: np.ndarray, threshold: float = config.SILENCE_RMS_THRESHOLD) -> Tuple[float, bool]:
     """
     Calculates RMS energy and determines if the chunk is silent with enhanced validation.
     
@@ -267,8 +270,8 @@ def is_silent(audio_chunk: np.ndarray, threshold: float = SILENCE_RMS_THRESHOLD)
         
         # Validate threshold
         if not isinstance(threshold, (int, float)) or threshold < 0:
-            logger.warning(f"Invalid threshold value: {threshold}. Using default {SILENCE_RMS_THRESHOLD}")
-            threshold = SILENCE_RMS_THRESHOLD
+            logger.warning(f"Invalid threshold value: {threshold}. Using default {config.SILENCE_RMS_THRESHOLD}")
+            threshold = config.SILENCE_RMS_THRESHOLD
         
         # Calculate RMS with enhanced precision
         audio_float32 = np.array(audio_chunk, dtype=np.float32)

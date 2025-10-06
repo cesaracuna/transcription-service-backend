@@ -11,7 +11,10 @@ from collections import Counter, defaultdict
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 
-from .constants import SANDWICH_MAX_DURATION, SANDWICH_MAX_PAUSE
+from .config import get_config
+
+# Get configuration instance  
+config = get_config()
 from .utils import parse_timestamp_to_seconds
 from .models import Segment, Hallucination
 
@@ -142,10 +145,10 @@ def analyze_segment_context(
                     f"prev_gap={analysis.prev_gap:.2f}s, next_gap={analysis.next_gap:.2f}s")
 
         # 3. Check if it's a short interruption
-        analysis.is_short_interruption = analysis.duration < SANDWICH_MAX_DURATION
+        analysis.is_short_interruption = analysis.duration < config.SANDWICH_MAX_DURATION
         analysis.are_gaps_small = (
-            analysis.prev_gap < SANDWICH_MAX_PAUSE and 
-            analysis.next_gap < SANDWICH_MAX_PAUSE
+            analysis.prev_gap < config.SANDWICH_MAX_PAUSE and 
+            analysis.next_gap < config.SANDWICH_MAX_PAUSE
         )
         
         if not (analysis.is_short_interruption and analysis.are_gaps_small):
@@ -214,8 +217,8 @@ def detect_sandwiched_hallucinations(
     metrics = HallucinationDetectionMetrics()
     
     logger.info(f"Starting sandwiched hallucination detection on {len(segments)} segments")
-    logger.info(f"Detection parameters: max_duration={SANDWICH_MAX_DURATION}s, "
-               f"max_pause={SANDWICH_MAX_PAUSE}s")
+    logger.info(f"Detection parameters: max_duration={config.SANDWICH_MAX_DURATION}s, "
+               f"max_pause={config.SANDWICH_MAX_PAUSE}s")
     logger.info(f"Blocklist size: {len(hallucination_texts)} patterns")
     logger.info(f"Primary languages: {primary_languages}")
     
@@ -516,3 +519,133 @@ def analyze_hallucination_patterns(segments_to_delete: List[Segment]) -> Dict[st
     
     logger.debug(f"Hallucination pattern analysis: {analysis_results}")
     return analysis_results
+
+
+def detect_question_mark_hallucinations(text: str) -> Tuple[bool, str]:
+    """
+    Detects hallucination patterns consisting of repeated question marks.
+    
+    Common patterns that indicate transcription hallucinations:
+    - "??????? ???????" (7+ question marks with spaces)
+    - "??? ??" (3+ question marks with spaces) 
+    - "??????" (6+ consecutive question marks)
+    - Mixed patterns with spaces and repetitions
+    
+    Args:
+        text: Input text to analyze for question mark patterns
+        
+    Returns:
+        Tuple of (is_hallucination: bool, pattern_description: str)
+    """
+    if not text or not isinstance(text, str):
+        return False, ""
+    
+    text = text.strip()
+    if not text:
+        return False, ""
+    
+    # Pattern 1: Long sequences of consecutive question marks (6+ marks)
+    import re
+    consecutive_pattern = re.search(r'\?{6,}', text)
+    if consecutive_pattern:
+        count = len(consecutive_pattern.group(0))
+        return True, f"Consecutive question marks: {count} marks"
+    
+    # Pattern 2: Multiple groups of question marks separated by spaces
+    # Examples: "??????? ???????", "??? ?? ???", "?? ??? ????"
+    space_separated_pattern = re.findall(r'\?+', text)
+    if space_separated_pattern:
+        total_question_marks = sum(len(group) for group in space_separated_pattern)
+        num_groups = len(space_separated_pattern)
+        
+        # Criteria for hallucination:
+        # - At least 2 groups of question marks
+        # - Total question marks >= 6
+        # - Text is mostly question marks (>80% of characters)
+        if (num_groups >= 2 and 
+            total_question_marks >= 6 and 
+            (total_question_marks / len(text.replace(' ', '')) > 0.8)):
+            return True, f"Spaced question mark groups: {num_groups} groups, {total_question_marks} total marks"
+    
+    # Pattern 3: Text that's almost entirely question marks and spaces
+    non_space_chars = text.replace(' ', '')
+    if non_space_chars and len(non_space_chars) >= 4:
+        question_mark_ratio = non_space_chars.count('?') / len(non_space_chars)
+        if question_mark_ratio > 0.9 and non_space_chars.count('?') >= 4:
+            return True, f"High question mark density: {question_mark_ratio:.1%} of text"
+    
+    return False, ""
+
+
+def detect_and_clean_question_mark_hallucinations(segments: List[Segment]) -> Tuple[List[Segment], int]:
+    """
+    Detects and removes segments containing question mark hallucination patterns.
+    
+    Args:
+        segments: List of transcription segments to analyze
+        
+    Returns:
+        Tuple of (cleaned_segments: List[Segment], removed_count: int)
+    """
+    if not segments:
+        logger.debug("No segments to analyze for question mark hallucinations")
+        return segments, 0
+    
+    start_time = time.time()
+    logger.info(f"Analyzing {len(segments)} segments for question mark hallucination patterns")
+    
+    cleaned_segments = []
+    removed_segments = []
+    detection_details = []
+    
+    for i, segment in enumerate(segments):
+        if not segment or not segment.text:
+            cleaned_segments.append(segment)
+            continue
+            
+        is_hallucination, pattern_description = detect_question_mark_hallucinations(segment.text)
+        
+        if is_hallucination:
+            removed_segments.append(segment)
+            detection_details.append({
+                'segment_index': i,
+                'text': segment.text,
+                'speaker': segment.speaker,
+                'start': segment.start_timestamp,
+                'end': segment.end_timestamp,
+                'pattern': pattern_description
+            })
+            logger.debug(f"Removed hallucination segment {i}: '{segment.text}' -> {pattern_description}")
+        else:
+            cleaned_segments.append(segment)
+    
+    analysis_time = time.time() - start_time
+    removed_count = len(removed_segments)
+    
+    logger.info(f"Question mark hallucination detection completed in {analysis_time:.3f}s:")
+    logger.info(f"  - Segments analyzed: {len(segments)}")
+    logger.info(f"  - Hallucinations detected: {removed_count}")
+    logger.info(f"  - Segments retained: {len(cleaned_segments)}")
+    
+    if removed_count > 0:
+        logger.info(f"  - Detection rate: {removed_count/len(segments):.1%}")
+        
+        # Log pattern distribution
+        pattern_counts = {}
+        for detail in detection_details:
+            pattern_type = detail['pattern'].split(':')[0]
+            pattern_counts[pattern_type] = pattern_counts.get(pattern_type, 0) + 1
+        
+        logger.info("  - Pattern distribution:")
+        for pattern, count in pattern_counts.items():
+            logger.info(f"    • {pattern}: {count} segments")
+        
+        # Log examples (first 3)
+        logger.debug("Example hallucinations detected:")
+        for detail in detection_details[:3]:
+            logger.debug(f"  - [{detail['speaker']}] '{detail['text']}' -> {detail['pattern']}")
+        
+        if len(detection_details) > 3:
+            logger.debug(f"  - ... and {len(detection_details) - 3} more")
+    
+    return cleaned_segments, removed_count

@@ -5,8 +5,7 @@ __pycache__/
 *.pyo
 
 # Virtual environment
-.venv-whisper/
-.venv_bkend/
+.venv/
 venv/
 env/
 # Specific to some virtual environment tools
@@ -61,6 +60,9 @@ Thumbs.db
 *.sqlite3
 *.db
 
+# Diarization files
+*.rttm
+
 # Environment variables
 .env
 .flaskenv
@@ -87,3 +89,4 @@ htmlcov/
 /audio_files/
 /models/
 /whisper-large-v3-finetuned/
+/logs/
