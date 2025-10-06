@@ -41,3 +41,29 @@ class PaginatedJobResponse(BaseModel):
     total_pages: int
     current_page: int
     items: List[JobHistoryItemSchema]
+
+class ParagraphBase(BaseModel):
+    start_timestamp: Optional[str] = None
+    end_timestamp: Optional[str] = None
+    speaker: Optional[str] = None
+    original_text: Optional[str] = None
+    formatted_text: Optional[str] = None
+    changed_words: Optional[str] = None
+    differences: Optional[str] = None
+    status: Optional[str] = None
+    language: Optional[str] = None
+    confidence: Optional[float] = None
+    
+class Paragraph(ParagraphBase):
+    id: uuid.UUID
+    model_config = ConfigDict(from_attributes=True)
+
+class ParagraphsResponse(BaseModel):
+    job_id: uuid.UUID
+    job_status: JobStatus
+    original_filename: str
+    audio_duration: Optional[float] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    total_paragraphs: int
+    paragraphs: List[Paragraph]

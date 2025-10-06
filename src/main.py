@@ -1,120 +1,55 @@
 ﻿import uuid
 import os
-import time
 import logging
-import subprocess
 import math
 
+from .config import initialize_config, get_config
 from .logging_config import setup_logging
 from fastapi import FastAPI, Depends, UploadFile, File, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Query
 from sqlalchemy.orm import Session
+from .security import (
+    comprehensive_file_validation, generate_secure_filename, 
+    create_secure_storage_path, SecurityError
+)
+from pydub import AudioSegment
+from pydub.effects import normalize
 
-from celery import Celery
+# Initialize configuration
+config = get_config()
+initialize_config()
+
+from celery import chain as celery_chain
+from .celery_app import celery_app
 from .database import get_db
 from . import models
 from . import schemas
 from typing import Optional
 
-client_celery_app = Celery(
-    "client",
-    broker="redis://localhost:6379/0",
-    backend="redis://localhost:6379/0"
+app = FastAPI(
+    title=config.APP_NAME,
+    version=config.APP_VERSION,
+    debug=config.DEBUG
 )
 
-app = FastAPI()
-
-# 2. Define de dónde permites que vengan las peticiones
-# origins = ["*"]
-origins = [
-    "http://localhost",
-    "http://localhost:8080",
-    "https://localhost:7003",
-    "http://localhost:5149",
-]
-
-# 3. Añade el middleware a tu aplicación
+# Configure CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=config.CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"], # Permite todos los métodos (GET, POST, etc.)
-    allow_headers=["*"], # Permite todas las cabeceras
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-AUDIO_STORAGE_PATH = "./audio_files"
-os.makedirs(AUDIO_STORAGE_PATH, exist_ok=True)
+# Configure storage paths
+AUDIO_STORAGE_PATH = str(config.AUDIO_STORAGE_PATH)
+logging.info(f"Audio storage path: {AUDIO_STORAGE_PATH}")
 
-# Configurar el logging para el proceso de la API
-setup_logging(process_name="FastAPI")
+# Configure logging for the API process
+setup_logging(process_name="FastAPI", log_level=config.LOG_LEVEL)
 
-def convert_to_wav_and_resample(input_audio_path, output_dir):
-    """Converts audio to a standardized 16kHz mono WAV format."""
-    logging.info(f"Starting audio format standardization...")
-    
-    try:
-        # Input validation
-        if not os.path.exists(input_audio_path):
-            logging.error(f"Input audio file not found: {input_audio_path}")
-            return None
-            
-        if not os.path.exists(output_dir):
-            logging.info(f"Creating output directory: {output_dir}")
-            os.makedirs(output_dir, exist_ok=True)
-
-        # Generate output path
-        base_name = os.path.splitext(os.path.basename(input_audio_path))[0]
-        output_wav_path = os.path.join(output_dir, f"{base_name}_16khz_mono.wav")
-        
-        logging.info(f"Converting audio file:")
-        logging.info(f"  Input: {input_audio_path}")
-        logging.info(f"  Output: {output_wav_path}")
-
-        # Check if output file already exists
-        if os.path.exists(output_wav_path):
-            logging.info(f"Output file already exists, will be overwritten")
-
-        # Build FFmpeg command
-        command = [
-            "ffmpeg",
-            "-i", input_audio_path,
-            "-map", "0:a",          # Map all audio tracks from input
-            "-ac", "1",             # Mix all channels to mono
-            "-ar", "16000",         # Set sample rate to 16kHz
-            "-c:a", "pcm_s16le",    # Use standard WAV codec
-            "-y", output_wav_path   # Overwrite output file
-        ]
-
-        logging.debug(f"Executing FFmpeg command: {' '.join(command)}")
-        start_time = time.time()
-        
-        result = subprocess.run(command, check=True, capture_output=True, text=True)
-        
-        conversion_time = time.time() - start_time
-        logging.info(f"Audio conversion completed successfully in {conversion_time:.2f}s")
-        logging.debug(f"FFmpeg stdout: {result.stdout}")
-        
-        # Verify output file was created
-        if os.path.exists(output_wav_path):
-            file_size = os.path.getsize(output_wav_path)
-            logging.info(f"Output file created: {output_wav_path} ({file_size} bytes)")
-            return output_wav_path
-        else:
-            logging.error("Output file was not created despite successful FFmpeg execution")
-            return None
-            
-    except subprocess.CalledProcessError as e:
-        logging.error(f"FFmpeg conversion failed with return code {e.returncode}")
-        logging.error(f"FFmpeg stderr: {e.stderr}")
-        logging.error(f"FFmpeg stdout: {e.stdout}")
-        logging.error("Please ensure ffmpeg is installed and accessible in your PATH")
-        return None
-    except Exception as e:
-        logging.error(f"Unexpected error during audio conversion: {str(e)}", exc_info=True)
-        return None
-
-
+# create_transcription_job
 @app.post("/jobs/", response_model=schemas.JobCreateResponse, status_code=202)
 async def create_transcription_job(
         user_id: str = Form(...),
@@ -122,66 +57,124 @@ async def create_transcription_job(
         db: Session = Depends(get_db)
 ):
     logging.info(f"Received transcription job request from user {user_id}, "
-                f"filename: {file.filename}, size: {file.size} bytes")
+                f"filename: {file.filename}, content_type: {file.content_type}")
     
     try:
-        # 1. Save uploaded file
-        unique_filename = f"{uuid.uuid4()}-{file.filename}"
-        original_file_path = os.path.join(AUDIO_STORAGE_PATH, unique_filename)
+        # 1. Initial security validations
+        if not file.filename:
+            raise HTTPException(status_code=400, detail="Filename is required")
         
-        logging.debug(f"Saving uploaded file to: {original_file_path}")
-        
-        with open(original_file_path, "wb") as buffer:
-            content = await file.read()
-            buffer.write(content)
+        # Validate and sanitize user_id format
+        try:
+            # Sanitize the user_id (remove spaces, convert to lowercase)
+            sanitized_user_id = user_id.strip().lower()
+            logging.debug(f"Original user_id: '{user_id}', sanitized: '{sanitized_user_id}'")
             
-        file_size = os.path.getsize(original_file_path)
-        logging.info(f"File saved successfully: {file_size} bytes")
-
-        # 2. Convert to standardized format
-        logging.info("Starting audio format conversion...")
-        standardized_wav_path = convert_to_wav_and_resample(original_file_path, AUDIO_STORAGE_PATH)
-
-        if not standardized_wav_path:
-            logging.error(f"Audio conversion failed for file: {file.filename}")
-            # Clean up original file
-            try:
-                os.remove(original_file_path)
-                logging.debug("Cleaned up original file after conversion failure")
-            except Exception as cleanup_error:
-                logging.warning(f"Failed to clean up original file: {str(cleanup_error)}")
-                
+            user_uuid = uuid.UUID(sanitized_user_id)
+            logging.debug(f"Valid UUID received: {user_uuid}")
+        except ValueError as e:
+            logging.error(f"Invalid UUID format for user_id '{user_id}' (length: {len(user_id)}): {e}")
             raise HTTPException(
-                status_code=400,
-                detail="Failed to process the uploaded audio file. It might be corrupt or in an unsupported format.")
+                status_code=400, 
+                detail=f"Invalid user ID: '{user_id}' is not a valid UUID. Expected format: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'"
+            )
+        
+        # Verify file size before processing
+        if file.size and file.size > config.MAX_FILE_SIZE_MB * 1024 * 1024:
+            raise HTTPException(
+                status_code=413, 
+                detail=f"File exceeds maximum allowed size ({config.MAX_FILE_SIZE_MB}MB)"
+            )
+        
+        # 2. Generate secure filename
+        secure_filename = generate_secure_filename(file.filename)
+        original_file_path = create_secure_storage_path(AUDIO_STORAGE_PATH, secure_filename)
+        
+        logging.info(f"Saving uploaded file securely: {file.filename} -> {secure_filename}")
+        logging.debug(f"Target path: {original_file_path}")
+        
+        # 3. Save file to disk with streaming for large files
+        bytes_written = 0
+        try:
+            with open(original_file_path, "wb") as buffer:
+                while True:
+                    chunk = await file.read(8192)  # 8KB chunks
+                    if not chunk:
+                        break
+                    buffer.write(chunk)
+                    bytes_written += len(chunk)
+                    
+                    # Verify limit during writing
+                    if bytes_written > config.MAX_FILE_SIZE_MB * 1024 * 1024:
+                        # Clean up partial file
+                        try:
+                            os.remove(original_file_path)
+                        except:
+                            pass
+                        raise HTTPException(
+                            status_code=413, 
+                            detail=f"File exceeds maximum allowed size ({config.MAX_FILE_SIZE_MB}MB)"
+                        )
+                        
+        except Exception as e:
+            # Clean up partial file in case of error
+            try:
+                if os.path.exists(original_file_path):
+                    os.remove(original_file_path)
+            except:
+                pass
+            raise HTTPException(status_code=500, detail=f"Error saving file: {str(e)}")
+        
+        file_size = os.path.getsize(original_file_path)
+        logging.info(f"File saved successfully: {file_size} bytes ({file_size/(1024*1024):.2f} MB)")
 
-        # 3. Create database record
-        logging.debug(f"Creating job record in database for user {user_id}")
+        # 4. Create database record immediately after file is saved
+        logging.debug(f"Creating job record in database for user {user_uuid}")
         new_job = models.Job(
-            user_id=uuid.UUID(user_id),
-            original_filename=file.filename,
-            audio_file_path=standardized_wav_path,
+            user_id=user_uuid,
+            original_filename=file.filename,  # Keep original filename for user reference
+            audio_file_path=original_file_path,  # Store original file path initially
             status=models.JobStatus.PENDING
         )
         db.add(new_job)
         db.commit()
         db.refresh(new_job)
-        
+
         logging.info(f"Job created successfully with ID: {new_job.id}")
 
-        # 4. Queue transcription task
-        logging.info(f"Queueing transcription task for job {new_job.id}")
-        client_celery_app.send_task("jobs.transcribe", args=[str(new_job.id)])
+        # 5. Queue audio validation and preprocessing task first
+        logging.info(f"Queueing audio processing pipeline chain for job {new_job.id}")
+        workflow = celery_chain(
+            celery_app.signature("tasks.audio_preprocessing", args=[str(new_job.id)], immutable=True),
+            celery_app.signature("tasks.speaker_segmentation", args=[str(new_job.id)], immutable=True),
+            celery_app.signature("tasks.generate_transcript", args=[str(new_job.id)], immutable=True),
+            celery_app.signature("tasks.complete_processing", args=[str(new_job.id)], immutable=True)
+        )
+        result = workflow.apply_async()
         
-        logging.info(f"Transcription job {new_job.id} queued successfully for user {user_id}")
+        logging.info(f"Transcription job {new_job.id} created and queued successfully for user {user_uuid}")
         return new_job
         
     except HTTPException:
         # Re-raise HTTP exceptions
         raise
+    except SecurityError as e:
+        # user_uuid might not be defined if UUID validation failed
+        user_ref = user_uuid if 'user_uuid' in locals() else user_id
+        logging.error(f"Security error for user {user_ref}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=400, detail=f"Security error: {str(e)}")
     except Exception as e:
-        logging.error(f"Unexpected error creating transcription job for user {user_id}: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error while processing the request")
+        # user_uuid might not be defined if UUID validation failed
+        user_ref = user_uuid if 'user_uuid' in locals() else user_id
+        logging.error(f"Unexpected error creating transcription job for user {user_ref}: {str(e)}", exc_info=True)
+        # Clean up any partially created files
+        try:
+            if 'original_file_path' in locals() and os.path.exists(original_file_path):
+                os.remove(original_file_path)
+                logging.info(f"Cleaned up file after error: {original_file_path}")
+        except:
+            pass
+        raise HTTPException(status_code=500, detail="Internal server error processing request")
 
 
 @app.get("/jobs/{job_id}", response_model=schemas.Job)
@@ -239,14 +232,17 @@ def get_user_jobs(
     """
     logging.info(f"Fetching page {page} of completed jobs for user_id: {user_id}")
 
-    # consulta base
-    base_query = db.query(models.Job).filter(models.Job.user_id == user_id)
+    # Base query - exclude DELETED jobs by default
+    base_query = db.query(models.Job).filter(
+        models.Job.user_id == user_id,
+        models.Job.status != models.JobStatus.DELETED
+    )
 
-    # aplicar filtro si nos dan un estado
+    # Apply filter if we get a status
     if status:
         base_query = base_query.filter(models.Job.status == status)
 
-    # contamos el total de items que cumplen con el criterio
+    # Count total items that meet the criteria
     total_items = base_query.count()
 
     jobs = base_query.order_by(models.Job.created_at.desc()).offset((page - 1) * size).limit(size).all()
@@ -300,8 +296,8 @@ def delete_segment(job_id: uuid.UUID, segment_id: uuid.UUID, db: Session = Depen
     """
     logging.info(f"Received request to delete Segment ID: {segment_id} from Job ID: {job_id}")
 
-    # Hacemos una consulta más segura, asegurándonos de que el segmento
-    # realmente pertenece al job especificado.
+    # Make a safer query, ensuring that the segment
+    # actually belongs to the specified job.
     segment = db.query(models.Segment).filter(
         models.Segment.id == segment_id,
         models.Segment.job_id == job_id
@@ -336,23 +332,75 @@ def mark_job_as_viewed(job_id: uuid.UUID, db: Session = Depends(get_db)):
     return
 
 
-@app.get("/users/check/{user_name}")
-def check_user_exists(user_name: str, db: Session = Depends(get_db)):
+@app.get("/jobs/{job_id}/paragraphs", response_model=schemas.ParagraphsResponse)
+def get_job_paragraphs(job_id: uuid.UUID, db: Session = Depends(get_db)):
     """
-    Verifies if a user exists by username.
+    Retrieves all formatted paragraphs for a specific transcription job.
+
+    Returns paragraphs with original text, formatted text, formatting status,
+    differences information, and speaker details ordered by timestamp.
+
+    Args:
+        job_id: UUID of the job to retrieve paragraphs for
+        db: Database session dependency
+
+    Returns:
+        ParagraphsResponse: Job details with all paragraphs and formatting information
+
+    Raises:
+        HTTPException: 404 if job not found, 500 for internal errors
     """
-    logging.info(f"Checking if user exists: {user_name}")
-    
+    logging.info(f"Fetching paragraphs for job ID: {job_id}")
+
     try:
-        user = db.query(models.User).filter(models.User.username == user_name).first()
-        
-        if user:
-            logging.info(f"User found: {user_name}")
-            return {"exists": True, "user_id": str(user.id)}
-        else:
-            logging.info(f"User not found: {user_name}")
-            return {"exists": False}
-            
+        # Verify job exists
+        job = db.query(models.Job).filter(models.Job.id == job_id).first()
+        if not job:
+            logging.warning(f"Job not found: {job_id}")
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        # Get all paragraphs for this job, ordered by timestamp
+        paragraphs = db.query(models.Paragraph).filter(
+            models.Paragraph.job_id == job_id
+        ).order_by(models.Paragraph.start_timestamp).all()
+
+        logging.info(f"Found {len(paragraphs)} paragraphs for job {job_id}")
+
+        # Build response with job info and paragraphs
+        response_data = {
+            "job_id": job.id,
+            "job_status": job.status,
+            "original_filename": job.original_filename,
+            "audio_duration": job.audio_duration,
+            "created_at": job.created_at,
+            "updated_at": job.updated_at,
+            "total_paragraphs": len(paragraphs),
+            "paragraphs": paragraphs
+        }
+
+        logging.debug(f"Successfully returning {len(paragraphs)} paragraphs for job {job_id}")
+        return response_data
+
+    except HTTPException:
+        raise
     except Exception as e:
-        logging.error(f"Error checking user existence for {user_name}: {str(e)}", exc_info=True)
+        logging.error(f"Unexpected error fetching paragraphs for job {job_id}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.patch("/jobs/{job_id}/mark-as-deleted", status_code=204)
+def mark_job_as_deleted(job_id: uuid.UUID, db: Session = Depends(get_db)):
+    """
+    Marks a specific job as viewed.
+    """
+    logging.info(f"Received request to mark Job ID as viewed: {job_id}")
+    job = db.query(models.Job).filter(models.Job.id == job_id).first()
+
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    job.status = models.JobStatus.DELETED
+    db.commit()
+
+    # 204 Success, with no content to return!
+    return

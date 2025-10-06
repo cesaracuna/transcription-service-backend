@@ -8,13 +8,17 @@ import enum
 
 
 class JobStatus(str, enum.Enum):
-    PENDING = "pending"
-    DIARIZING = "diarizing"
-    TRANSCRIBING = "transcribing"
-    PROCESSING = "processing"
-    POST_PROCESSING = "post_processing"
-    COMPLETED = "completed"
-    FAILED = "failed"
+    PENDING = "PENDING"
+
+    DIARIZING = "DIARIZING"
+    TRANSCRIBING = "TRANSCRIBING"
+    # # PROCESSING = "PROCESSING"
+    FINALIZING = "FINALIZING"
+    FORMATTING = "FORMATTING"
+
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    DELETED = "DELETED"
 
 
 class User(Base):
@@ -29,11 +33,11 @@ class Job(Base):
     __tablename__ = "jobs"
     id = Column(UNIQUEIDENTIFIER, primary_key=True, default=uuid.uuid4)
     user_id = Column(UNIQUEIDENTIFIER, ForeignKey("users.id"), nullable=False)
-    status = Column(SQLAlchemyEnum(JobStatus), default=JobStatus.PENDING)
+    status = Column(SQLAlchemyEnum(JobStatus, name='jobstatus'), default=JobStatus.PENDING)
     original_filename = Column(String(255), nullable=False)
     audio_file_path = Column(String(1024), nullable=False)
     error_message = Column(Text, nullable=True)
-    audio_duration = Column(Float, nullable=True)  # Duración en segundos Cesar no se me olvide
+    audio_duration = Column(Float, nullable=True)  # Duration in seconds - remember this Cesar
     is_post_processed = Column(Boolean, default=False, nullable=False)
     is_viewed = Column(Boolean, default=False, nullable=False, server_default='0')
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -41,6 +45,7 @@ class Job(Base):
 
     owner = relationship("User", back_populates="jobs")
     segments = relationship("Segment", back_populates="job", cascade="all, delete-orphan", order_by="Segment.start_timestamp")
+    paragraphs = relationship("Paragraph", back_populates="job", cascade="all, delete-orphan", order_by="Paragraph.start_timestamp")
     job_hallucinations = relationship("JobHallucination", back_populates="job", cascade="all, delete-orphan")
     diarization_segments = relationship("DiarizationSegment", back_populates="job", cascade="all, delete-orphan")
 
@@ -52,7 +57,7 @@ class DiarizationSegment(Base):
     speaker_tag = Column(String(50), nullable=False)
     start_seconds = Column(Float, nullable=False)
     end_seconds = Column(Float, nullable=False)
-    status = Column(String(50), default="pending", nullable=False)
+    status = Column(String(50), default="PENDING", nullable=False)
 
     job = relationship("Job", back_populates="diarization_segments")
 
@@ -68,6 +73,24 @@ class Segment(Base):
     language = Column(String(10))
 
     job = relationship("Job", back_populates="segments")
+
+
+class Paragraph(Base):
+    __tablename__ = "paragraphs"
+    id = Column(UNIQUEIDENTIFIER, primary_key=True, default=uuid.uuid4)
+    job_id = Column(UNIQUEIDENTIFIER, ForeignKey("jobs.id"), nullable=False)
+    start_timestamp = Column(String(20))
+    end_timestamp = Column(String(20))
+    speaker = Column(String(50))
+    original_text = Column(Text)
+    formatted_text = Column(Text)
+    changed_words = Column(Text)
+    differences = Column(Text)
+    status = Column(String(20), nullable=False, default="pending")
+    language = Column(String(10))
+    confidence = Column(Float, nullable=False, default=0.0)
+
+    job = relationship("Job", back_populates="paragraphs")
 
 class Hallucination(Base):
     __tablename__ = "hallucinations"

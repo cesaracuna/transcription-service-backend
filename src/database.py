@@ -4,20 +4,30 @@ from contextlib import contextmanager
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
-from sqlalchemy.pool import NullPool
+from sqlalchemy.pool import QueuePool
 from sqlalchemy.exc import SQLAlchemyError
 
-from .constants import SQLALCHEMY_DATABASE_URL
+from .config import get_config
+
+config = get_config()
 
 logging.info("Initializing database connection...")
-logging.debug(f"Database URL: {SQLALCHEMY_DATABASE_URL.split('@')[0]}@[HIDDEN]")
+logging.debug(f"Database URL: {config.DATABASE_URL.split('@')[0]}@[HIDDEN]")
 
 try:
     engine = create_engine(
-        SQLALCHEMY_DATABASE_URL,
-        poolclass=NullPool
+        config.DATABASE_URL,
+        poolclass=QueuePool,
+        pool_size=config.DB_POOL_SIZE,
+        max_overflow=config.DB_MAX_OVERFLOW,
+        pool_pre_ping=True,  # Validate connections before use
+        echo=config.DB_ECHO,
+        connect_args={
+            "timeout": 30,  # Connection timeout in seconds
+        }
     )
     logging.info("Database engine created successfully")
+    logging.info(f"Pool configuration: size={config.DB_POOL_SIZE}, max_overflow={config.DB_MAX_OVERFLOW}")
 except Exception as e:
     logging.error(f"Failed to create database engine: {str(e)}", exc_info=True)
     raise
